@@ -1,0 +1,21 @@
+#! pgadmin-expose.yaml
+# Generated code, do not edit
+apiVersion: v1
+kind: Service
+metadata:
+    name: pgadmin
+    namespace: dashboard
+    labels:
+        com.docker.compose.project: dashboard
+        com.docker.compose.service: pgadmin
+spec:
+    selector:
+        com.docker.compose.project: dashboard
+        com.docker.compose.service: pgadmin
+    ports:
+        - name: pgadmin-443
+          port: 443
+          targetPort: pgadmin-443
+        - name: pgadmin-80
+          port: 80
+          targetPort: pgadmin-80

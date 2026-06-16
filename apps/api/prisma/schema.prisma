@@ -1,0 +1,574 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  HR_MANAGER
+  EMPLOYEE
+}
+
+enum PropertyStatus {
+  AVAILABLE
+  RESERVED
+  BOOKED
+  SOLD
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  COMMERCIAL
+  LAND
+  VILLA
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  SITE_VISIT_SCHEDULED
+  NEGOTIATION
+  CONVERTED
+  LOST
+}
+
+enum LeadSource {
+  WEBSITE
+  REFERRAL
+  SOCIAL_MEDIA
+  PHONE_INQUIRY
+  WALK_IN
+  OTHER
+}
+
+enum CustomerType {
+  BUYER
+  SELLER
+  BOTH
+}
+
+enum SiteVisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+}
+
+enum LeaveType {
+  SICK
+  CASUAL
+  ANNUAL
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+}
+
+enum AssignmentType {
+  PROPERTY
+  LEAD
+  SITE_VISIT
+  BOOKING
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  users               User[]
+  departments         Department[]
+  designations        Designation[]
+  employees           Employee[]
+  properties          Property[]
+  leads               Lead[]
+  customers           Customer[]
+  siteVisits          SiteVisit[]
+  bookings            Booking[]
+  attendances         Attendance[]
+  leaveRequests       LeaveRequest[]
+  leaveAllocations    LeaveAllocation[]
+  employeeAssignments EmployeeAssignment[]
+  performances        Performance[]
+  refreshTokens       RefreshToken[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String
+  companyId       String
+  firstName       String
+  lastName        String
+  hashedPassword  String?
+  avatarUrl       String?
+  role            UserRole @default(EMPLOYEE)
+  isActive        Boolean  @default(true)
+  notificationPreferences Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  employee      Employee?
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+
+  @@unique([companyId, email])
+  @@index([companyId])
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String
+  companyId   String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  designations Designation[]
+  employees    Employee[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("departments")
+}
+
+model Designation {
+  id           String   @id @default(cuid())
+  name         String
+  departmentId String
+  companyId    String
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  company    Company    @relation(fields: [companyId], references: [id])
+  employees  Employee[]
+
+  @@unique([name, departmentId])
+  @@index([companyId])
+  @@index([departmentId])
+  @@map("designations")
+}
+
+model Employee {
+  id            String         @id @default(cuid())
+  userId        String?        @unique
+  employeeCode  String
+  companyId     String
+  departmentId  String
+  designationId String
+  managerId     String?
+  phone         String?
+  dateOfJoining     DateTime?
+  salary            Decimal?       @db.Decimal(12, 2)
+  address           String?
+  status            EmployeeStatus @default(ACTIVE)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  company      Company     @relation(fields: [companyId], references: [id])
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department   Department  @relation(fields: [departmentId], references: [id])
+  designation  Designation @relation(fields: [designationId], references: [id])
+  manager      Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
+  subordinates Employee[]  @relation("EmployeeManager")
+
+  attendance         Attendance[]        @relation("EmployeeAttendance")
+  verifiedAttendance Attendance[]        @relation("AttendanceVerifier")
+  leaveRequests      LeaveRequest[]       @relation("EmployeeLeaveRequests")
+  leaveAllocations   LeaveAllocation[]
+  assignedProperties Property[]           @relation("PropertyAssignment")
+  assignedLeads      Lead[]               @relation("LeadAssignment")
+  assignedSiteVisits SiteVisit[]          @relation("SiteVisitAssignment")
+  assignedBookings   Booking[]            @relation("BookingAssignment")
+  createdCustomers   Customer[]
+  approvedLeaves     LeaveRequest[]       @relation("LeaveApprover")
+  activityLogs       ActivityLog[]
+  assignments        EmployeeAssignment[]
+  performance        Performance[]
+
+  @@unique([companyId, employeeCode])
+  @@index([companyId])
+  @@index([departmentId])
+  @@index([designationId])
+  @@index([managerId])
+  @@index([status])
+  @@map("employees")
+}
+
+model Attendance {
+  id           String           @id @default(cuid())
+  employeeId   String
+  companyId    String
+  date         DateTime         @db.Date
+  checkIn      DateTime?
+  checkOut     DateTime?
+  status       AttendanceStatus @default(PRESENT)
+  verified     Boolean          @default(false)
+  verifiedById String?
+  verifiedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  employee   Employee  @relation("EmployeeAttendance", fields: [employeeId], references: [id], onDelete: Cascade)
+  company    Company   @relation(fields: [companyId], references: [id])
+  verifiedBy Employee? @relation("AttendanceVerifier", fields: [verifiedById], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([date])
+  @@index([status])
+  @@map("attendance")
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  employeeId   String
+  companyId    String
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  type         LeaveType   @default(OTHER)
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  employee   Employee  @relation("EmployeeLeaveRequests", fields: [employeeId], references: [id], onDelete: Cascade)
+  approvedBy Employee? @relation("LeaveApprover", fields: [approvedById], references: [id])
+  company    Company   @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
+}
+
+model LeaveAllocation {
+  id         String    @id @default(cuid())
+  employeeId String
+  companyId  String
+  year       Int
+  leaveType  LeaveType
+  totalDays  Int       @default(0)
+  usedDays   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([employeeId, companyId, year, leaveType])
+  @@index([employeeId, year])
+  @@index([companyId])
+  @@map("leave_allocations")
+}
+
+model Property {
+  id                   String         @id @default(cuid())
+  propertyCode         String?        @unique
+  title                String
+  description          String?
+  type                 PropertyType   @default(APARTMENT)
+  status               PropertyStatus @default(AVAILABLE)
+  price                Decimal        @db.Decimal(14, 2)
+  area                 Decimal?       @db.Decimal(10, 2)
+  bedrooms             Int?
+  bathrooms            Int?
+  location             String
+  locality             String?
+  city                 String
+  state                String
+  images               Json?
+  amenities            Json?
+  companyId            String
+  assignedToEmployeeId String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  deletedAt            DateTime?
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  assignedTo Employee?   @relation("PropertyAssignment", fields: [assignedToEmployeeId], references: [id])
+  leads      Lead[]
+  siteVisits SiteVisit[]
+  bookings   Booking[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([type])
+  @@index([city])
+  @@index([assignedToEmployeeId])
+  @@index([companyId, status])
+  @@map("properties")
+}
+
+model Lead {
+  id                    String     @id @default(cuid())
+  propertyId            String?
+  customerName          String
+  customerEmail         String?
+  customerPhone         String?
+  source                LeadSource @default(OTHER)
+  status                LeadStatus @default(NEW)
+  notes                 String?
+  companyId             String
+  assignedToEmployeeId  String?
+  convertedToCustomerId String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  deletedAt             DateTime?
+
+  company             Company     @relation(fields: [companyId], references: [id])
+  property            Property?   @relation(fields: [propertyId], references: [id])
+  assignedTo          Employee?   @relation("LeadAssignment", fields: [assignedToEmployeeId], references: [id])
+  convertedToCustomer Customer?   @relation(fields: [convertedToCustomerId], references: [id])
+  siteVisits          SiteVisit[]
+  bookings            Booking[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([source])
+  @@index([assignedToEmployeeId])
+  @@index([propertyId])
+  @@map("leads")
+}
+
+model Customer {
+  id          String       @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  type        CustomerType @default(BUYER)
+  source      String?
+  notes       String?
+  companyId   String
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  createdBy  Employee?   @relation(fields: [createdById], references: [id])
+  leads      Lead[]
+  siteVisits SiteVisit[]
+  bookings   Booking[]
+
+  @@index([companyId])
+  @@index([email])
+  @@index([phone])
+  @@map("customers")
+}
+
+model SiteVisit {
+  id                   String          @id @default(cuid())
+  propertyId           String
+  customerId           String
+  leadId               String?
+  companyId            String
+  scheduledDate        DateTime
+  status               SiteVisitStatus @default(SCHEDULED)
+  notes                String?
+  feedback             String?
+  assignedToEmployeeId String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  company    Company  @relation(fields: [companyId], references: [id])
+  property   Property @relation(fields: [propertyId], references: [id])
+  customer   Customer @relation(fields: [customerId], references: [id])
+  lead       Lead?    @relation(fields: [leadId], references: [id])
+  assignedTo Employee @relation("SiteVisitAssignment", fields: [assignedToEmployeeId], references: [id])
+
+  @@index([companyId])
+  @@index([propertyId])
+  @@index([customerId])
+  @@index([assignedToEmployeeId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@map("site_visits")
+}
+
+model Booking {
+  id                   String        @id @default(cuid())
+  propertyId           String
+  customerId           String
+  leadId               String?
+  companyId            String
+  bookingDate          DateTime
+  amount               Decimal       @db.Decimal(14, 2)
+  status               BookingStatus @default(PENDING)
+  paymentStatus        PaymentStatus @default(PENDING)
+  notes                String?
+  assignedToEmployeeId String
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  company    Company  @relation(fields: [companyId], references: [id])
+  property   Property @relation(fields: [propertyId], references: [id])
+  customer   Customer @relation(fields: [customerId], references: [id])
+  lead       Lead?    @relation(fields: [leadId], references: [id])
+  assignedTo Employee @relation("BookingAssignment", fields: [assignedToEmployeeId], references: [id])
+
+  @@index([companyId])
+  @@index([propertyId])
+  @@index([customerId])
+  @@index([assignedToEmployeeId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@map("bookings")
+}
+
+model ActivityLog {
+  id            String   @id @default(cuid())
+  action        String
+  entityType    String
+  entityId      String
+  description   String?
+  companyId     String
+  performedById String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  company     Company   @relation(fields: [companyId], references: [id])
+  performedBy Employee? @relation(fields: [performedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([companyId])
+  @@index([performedById])
+  @@map("activity_logs")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  companyId String
+  expiresAt DateTime
+  revokedAt DateTime?
+  replacedBy String?
+  createdAt DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([userId])
+  @@index([token])
+  @@index([companyId])
+  @@map("refresh_tokens")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  title     String
+  message   String
+  type      String   @default("INFO")
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([userId, read])
+  @@index([companyId])
+  @@map("notifications")
+}
+
+model EmployeeAssignment {
+  id         String         @id @default(cuid())
+  employeeId String
+  companyId  String
+  type       AssignmentType
+  entityId   String
+  startDate  DateTime?
+  endDate    DateTime?
+  notes      String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, type])
+  @@index([companyId])
+  @@index([entityId])
+  @@map("employee_assignments")
+}
+
+model Performance {
+  id         String   @id @default(cuid())
+  employeeId String
+  companyId  String
+  year       Int
+  quarter    Int
+  score      Int      @db.SmallInt
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, year, quarter])
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([year, quarter])
+  @@map("performance")
+}

@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+playwright-report
+test-results
+.playwright-browsers
+.npm-cache
+.env
+.env.*
+*.log

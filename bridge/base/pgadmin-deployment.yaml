@@ -1,0 +1,40 @@
+#! pgadmin-deployment.yaml
+# Generated code, do not edit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: pgadmin
+    namespace: dashboard
+    labels:
+        com.docker.compose.project: dashboard
+        com.docker.compose.service: pgadmin
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            com.docker.compose.project: dashboard
+            com.docker.compose.service: pgadmin
+    strategy:
+        type: Recreate
+    template:
+        metadata:
+            labels:
+                com.docker.compose.project: dashboard
+                com.docker.compose.service: pgadmin
+                com.docker.compose.network.default: "true"
+        spec:
+            restartPolicy: unless-stopped
+            containers:
+                - name: realestate-pgadmin
+                  image: dpage/pgadmin4:latest
+                  imagePullPolicy: IfNotPresent
+                  env:
+                    - name: PGADMIN_DEFAULT_EMAIL
+                      value: "admin@realestate.com"
+                    - name: PGADMIN_DEFAULT_PASSWORD
+                      value: "admin"
+                  ports:
+                    - name: pgadmin-443
+                      containerPort: 443
+                    - name: pgadmin-80
+                      containerPort: 80

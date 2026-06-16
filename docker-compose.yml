@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dashboard-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER before running docker compose}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before running docker compose}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB before running docker compose}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: dashboard-api
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL before running docker compose}
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET before running docker compose}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY before running docker compose}
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL before running docker compose}
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  api-migrate:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: dashboard-api-migrate
+    command: ["npx", "prisma", "db", "push", "--accept-data-loss"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL before running docker compose}
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET before running docker compose}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY before running docker compose}
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL before running docker compose}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: dashboard-web
+    environment:
+      NODE_ENV: production
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET before running docker compose}
+      AUTH_URL: ${AUTH_URL:?Set AUTH_URL before running docker compose}
+      NEXTAUTH_URL: ${AUTH_URL:?Set AUTH_URL before running docker compose}
+      AUTH_TRUST_HOST: "true"
+      API_URL: ${WEB_API_URL:-http://api:4000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
