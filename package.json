@@ -5,9 +5,9 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=apps/web & npm run dev --workspace=apps/api",
+    "dev": "node scripts/dev.mjs",
     "dev:web": "npm run dev --workspace=apps/web",
-    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:api": "npm run start:dev --workspace=apps/api",
     "build": "npm run build --workspace=apps/web && npm run build --workspace=apps/api",
     "verify": "npm run lint:all && npm run build && npm run test:all",
     "lint:all": "npm run lint --workspace=apps/web && npm run lint --workspace=apps/api",

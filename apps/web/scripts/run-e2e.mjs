@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import net from "node:net";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -77,6 +78,38 @@ async function waitForServer(url, server) {
   throw new Error(`Timed out waiting for ${probeURL}`);
 }
 
+async function isServerReady(url) {
+  const probeURL = new URL("/sign-in", url);
+
+  try {
+    const response = await fetch(probeURL, { redirect: "manual" });
+    if (response.status >= 500) return false;
+
+    const body = await response.text();
+    return body.includes("RealEstate CRM");
+  } catch {
+    return false;
+  }
+}
+
+async function isPortOpen(host, targetPort) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection(
+      { host, port: Number(targetPort), timeout: 1000 },
+      () => {
+        socket.destroy();
+        resolve(true);
+      }
+    );
+
+    socket.on("error", () => resolve(false));
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
 async function runPlaywright(args, env) {
   const test = spawn(process.execPath, [playwrightCli, "test", ...args], {
     cwd: appDir,
@@ -138,17 +171,29 @@ let server;
 
 try {
   if (shouldStartServer) {
-    if (!isProductionServer) {
-      cleanNextCache();
-    }
+    const existingServerReady = await isServerReady(baseURL);
 
-    const nextCommand = isProductionServer ? "start" : "dev";
-    server = spawn(process.execPath, [nextCli, nextCommand, "--port", port], {
-      cwd: appDir,
-      env,
-      stdio: ["ignore", "inherit", "inherit"],
-    });
-    await waitForServer(baseURL, server);
+    if (!existingServerReady) {
+      const portOccupied = await isPortOpen(base.hostname, port);
+
+      if (portOccupied) {
+        throw new Error(
+          `Port ${port} is already in use, but ${new URL("/sign-in", baseURL)} is not healthy. Stop the existing process, set WEB_E2E_BASE_URL to a free port, or set PLAYWRIGHT_SKIP_WEBSERVER=1 for a known-good running server.`
+        );
+      }
+
+      if (!isProductionServer) {
+        cleanNextCache();
+      }
+
+      const nextCommand = isProductionServer ? "start" : "dev";
+      server = spawn(process.execPath, [nextCli, nextCommand, "--port", port], {
+        cwd: appDir,
+        env,
+        stdio: ["ignore", "inherit", "inherit"],
+      });
+      await waitForServer(baseURL, server);
+    }
   }
 
   process.exitCode = await runPlaywright(process.argv.slice(2), env);

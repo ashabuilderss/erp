@@ -5,13 +5,40 @@ import {
 
 describe('getSeedConfig', () => {
   it('returns local defaults with 12 bcrypt rounds outside production', () => {
-    expect(getSeedConfig({})).toEqual({
+    const config = getSeedConfig({});
+
+    expect(config).toMatchObject({
       companyName: 'Default Company',
       companySlug: 'default-company',
       adminEmail: 'admin@company.com',
       adminPassword: 'Admin@123',
       bcryptRounds: 12,
     });
+    expect(
+      config.demoUsers.map(({ email, password, role }) => ({
+        email,
+        password,
+        role,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          email: 'admin@company.com',
+          password: 'Admin@123',
+          role: 'ADMIN',
+        },
+        {
+          email: 'hr@company.com',
+          password: 'Hr@12345',
+          role: 'HR_MANAGER',
+        },
+        {
+          email: 'sales@company.com',
+          password: 'Sales@12345',
+          role: 'EMPLOYEE',
+        },
+      ]),
+    );
   });
 
   it('requires explicit seed values in production', () => {
@@ -63,6 +90,20 @@ describe('getSeedConfig', () => {
     );
   });
 
+  it('rejects local sample identifiers in production', () => {
+    expect(() =>
+      getSeedConfig({
+        NODE_ENV: 'production',
+        SEED_COMPANY_NAME: 'Default Company',
+        SEED_COMPANY_SLUG: 'default-company',
+        SEED_ADMIN_EMAIL: 'admin@company.com',
+        SEED_ADMIN_PASSWORD: 'Use-A-Real-Temporary-Password-123!',
+      }),
+    ).toThrow(
+      'Production seed values must replace template placeholders: SEED_COMPANY_NAME, SEED_COMPANY_SLUG, SEED_ADMIN_EMAIL',
+    );
+  });
+
   it('returns explicit safe seed values in production', () => {
     expect(
       getSeedConfig({
@@ -78,6 +119,7 @@ describe('getSeedConfig', () => {
       adminEmail: 'owner@acme.example',
       adminPassword: 'Use-A-Real-Temporary-Password-123!',
       bcryptRounds: 12,
+      demoUsers: [],
     });
   });
 });
@@ -128,6 +170,21 @@ describe('assertProductionSeedCompanyIsEmpty', () => {
         {
           userCount: 0,
           employeeCount: 1,
+        },
+      ),
+    ).toThrow(
+      'Production seed refuses to reset an existing company. Seed only an empty production company.',
+    );
+  });
+
+  it('refuses production seeding for an existing company with other records', () => {
+    expect(() =>
+      assertProductionSeedCompanyIsEmpty(
+        { NODE_ENV: 'production' },
+        {
+          userCount: 0,
+          employeeCount: 0,
+          relatedRecordCount: 1,
         },
       ),
     ).toThrow(

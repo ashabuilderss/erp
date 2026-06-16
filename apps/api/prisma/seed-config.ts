@@ -1,18 +1,94 @@
+import { UserRole } from "@prisma/client";
+
+export interface DemoSeedUser {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  employeeCode: string;
+  department: string;
+  designation: string;
+  phone: string;
+}
+
 export interface SeedConfig {
   companyName: string;
   companySlug: string;
   adminEmail: string;
   adminPassword: string;
   bcryptRounds: number;
+  demoUsers: DemoSeedUser[];
 }
 
 export interface SeedCompanyCounts {
   userCount: number;
   employeeCount: number;
+  relatedRecordCount?: number;
 }
 
 const LOCAL_DEFAULT_PASSWORD = "Admin@123";
+const LOCAL_DEMO_USERS: DemoSeedUser[] = [
+  {
+    email: "admin@company.com",
+    password: LOCAL_DEFAULT_PASSWORD,
+    firstName: "Admin",
+    lastName: "User",
+    role: UserRole.ADMIN,
+    employeeCode: "ADM-001",
+    department: "Operations",
+    designation: "Operations Manager",
+    phone: "+91 98765 10001",
+  },
+  {
+    email: "hr@company.com",
+    password: "Hr@12345",
+    firstName: "Priya",
+    lastName: "Sharma",
+    role: UserRole.HR_MANAGER,
+    employeeCode: "HR-001",
+    department: "Human Resources",
+    designation: "HR Manager",
+    phone: "+91 98765 10002",
+  },
+  {
+    email: "sales@company.com",
+    password: "Sales@12345",
+    firstName: "Aarav",
+    lastName: "Mehta",
+    role: UserRole.EMPLOYEE,
+    employeeCode: "SAL-001",
+    department: "Sales",
+    designation: "Sales Manager",
+    phone: "+91 98765 10003",
+  },
+  {
+    email: "agent@company.com",
+    password: "Agent@12345",
+    firstName: "Neha",
+    lastName: "Kapoor",
+    role: UserRole.EMPLOYEE,
+    employeeCode: "SAL-002",
+    department: "Sales",
+    designation: "Sales Executive",
+    phone: "+91 98765 10004",
+  },
+  {
+    email: "ops@company.com",
+    password: "Ops@12345",
+    firstName: "Vikram",
+    lastName: "Rao",
+    role: UserRole.EMPLOYEE,
+    employeeCode: "OPS-001",
+    department: "Operations",
+    designation: "Operations Executive",
+    phone: "+91 98765 10005",
+  },
+];
 const PRODUCTION_TEMPLATE_VALUES = new Set([
+  "Default Company",
+  "default-company",
+  "admin@company.com",
   "Owner Company",
   "owner-company",
   "owner-admin@example.com",
@@ -77,6 +153,7 @@ export function getSeedConfig(env: NodeJS.ProcessEnv = process.env): SeedConfig 
     adminEmail: seedAdminEmail,
     adminPassword: seedAdminPassword,
     bcryptRounds: 12,
+    demoUsers: env.NODE_ENV === "production" ? [] : LOCAL_DEMO_USERS,
   };
 }
 
@@ -88,7 +165,7 @@ export function assertProductionSeedCompanyIsEmpty(
     return;
   }
 
-  if (counts.userCount > 0 || counts.employeeCount > 0) {
+  if (counts.userCount > 0 || counts.employeeCount > 0 || (counts.relatedRecordCount ?? 0) > 0) {
     throw new Error(PRODUCTION_EXISTING_COMPANY_ERROR);
   }
 }
