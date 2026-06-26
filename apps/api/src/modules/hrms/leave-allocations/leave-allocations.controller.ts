@@ -13,6 +13,8 @@ import { CreateLeaveAllocationDto } from './dto/create-leave-allocation.dto';
 import { UpdateLeaveAllocationDto } from './dto/update-leave-allocation.dto';
 import { QueryLeaveAllocationDto } from './dto/query-leave-allocation.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { Permissions } from '../../../common/auth/permissions';
 import {
   CurrentCompany,
   CurrentEmployeeId,
@@ -25,6 +27,7 @@ export class LeaveAllocationsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.LEAVE_CREATE)
   async create(
     @Body() dto: CreateLeaveAllocationDto,
     @CurrentCompany('id') companyId: string,
@@ -34,6 +37,7 @@ export class LeaveAllocationsController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.LEAVE_READ)
   async findAll(
     @Query() query: QueryLeaveAllocationDto,
     @CurrentCompany('id') companyId: string,
@@ -43,6 +47,7 @@ export class LeaveAllocationsController {
 
   @Get('my-balance')
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.LEAVE_READ)
   async myBalance(
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentCompany('id') companyId: string,
@@ -52,6 +57,7 @@ export class LeaveAllocationsController {
 
   @Get('employee/:employeeId')
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.LEAVE_READ)
   async employeeBalance(
     @Param('employeeId') employeeId: string,
     @CurrentCompany('id') companyId: string,
@@ -61,6 +67,7 @@ export class LeaveAllocationsController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.LEAVE_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -70,6 +77,7 @@ export class LeaveAllocationsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.LEAVE_CREATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateLeaveAllocationDto,
@@ -80,6 +88,7 @@ export class LeaveAllocationsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.LEAVE_APPROVE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

@@ -299,16 +299,90 @@ export class AnalyticsService {
       : 0;
   }
 
+  async getBookingsByEmployee(companyId: string) {
+    const employees = await this.prisma.employee.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      include: { user: true },
+    });
+
+    const employeeIds = employees.map((e) => e.id);
+    const bookings = await this.prisma.booking.groupBy({
+      by: ['assignedToEmployeeId', 'status'],
+      where: { companyId, assignedToEmployeeId: { in: employeeIds } },
+      _count: { id: true },
+    });
+
+    return employees
+      .map((e) => {
+        const empBookings = bookings.filter((b) => b.assignedToEmployeeId === e.id);
+        const total = empBookings.reduce((sum, b) => sum + b._count.id, 0);
+        const closed = empBookings
+          .filter((b) => b.status === 'CONFIRMED')
+          .reduce((sum, b) => sum + b._count.id, 0);
+        return {
+          name: e.user ? `${e.user.firstName} ${e.user.lastName}` : 'Unlinked',
+          bookings: total,
+          closed,
+        };
+      })
+      .filter((e) => e.bookings > 0)
+      .sort((a, b) => b.bookings - a.bookings)
+      .slice(0, 10);
+  }
+
+  async getSiteVisitsByEmployee(companyId: string) {
+    const employees = await this.prisma.employee.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      include: { user: true },
+    });
+
+    const employeeIds = employees.map((e) => e.id);
+    const siteVisits = await this.prisma.siteVisit.groupBy({
+      by: ['assignedToEmployeeId', 'status'],
+      where: { companyId, assignedToEmployeeId: { in: employeeIds } },
+      _count: { id: true },
+    });
+
+    return employees
+      .map((e) => {
+        const empVisits = siteVisits.filter((sv) => sv.assignedToEmployeeId === e.id);
+        const scheduled = empVisits
+          .filter((sv) => sv.status === 'SCHEDULED')
+          .reduce((sum, sv) => sum + sv._count.id, 0);
+        const completed = empVisits
+          .filter((sv) => sv.status === 'COMPLETED')
+          .reduce((sum, sv) => sum + sv._count.id, 0);
+        return {
+          name: e.user ? `${e.user.firstName} ${e.user.lastName}` : 'Unlinked',
+          scheduled,
+          completed,
+        };
+      })
+      .filter((e) => e.scheduled > 0 || e.completed > 0)
+      .sort((a, b) => (b.scheduled + b.completed) - (a.scheduled + a.completed))
+      .slice(0, 10);
+  }
+
   private async getAttendanceTrend(companyId: string) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
     thirtyDaysAgo.setHours(0, 0, 0, 0);
 
-    const records = await this.prisma.attendance.findMany({
-      where: { companyId, date: { gte: thirtyDaysAgo } },
-      select: { date: true, status: true },
-      orderBy: { date: 'asc' },
-    });
+    const [records, leaves] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where: { companyId, date: { gte: thirtyDaysAgo } },
+        select: { date: true, status: true },
+        orderBy: { date: 'asc' },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          companyId,
+          status: 'APPROVED',
+          endDate: { gte: thirtyDaysAgo },
+        },
+        select: { startDate: true, endDate: true },
+      }),
+    ]);
 
     const dayMap = new Map<
       string,
@@ -327,7 +401,20 @@ export class AnalyticsService {
       if (!entry) continue;
       if (r.status === 'PRESENT') entry.present++;
       else if (r.status === 'ABSENT') entry.absent++;
-      else if (r.status === 'LEAVE') entry.onLeave++;
+    }
+
+    for (const leave of leaves) {
+      const cursor = new Date(
+        Math.max(leave.startDate.getTime(), thirtyDaysAgo.getTime()),
+      );
+      cursor.setHours(0, 0, 0, 0);
+      const end = new Date(leave.endDate);
+      end.setHours(0, 0, 0, 0);
+      while (cursor <= end) {
+        const entry = dayMap.get(cursor.toISOString().slice(0, 10));
+        if (entry) entry.onLeave++;
+        cursor.setDate(cursor.getDate() + 1);
+      }
     }
 
     return Array.from(dayMap.entries()).map(([date, counts]) => ({

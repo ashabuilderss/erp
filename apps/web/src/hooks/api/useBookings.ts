@@ -23,10 +23,20 @@ export function useCreateBooking() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: CreateBookingDto) => api.post<Booking>("/bookings", dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    onMutate: async (dto) => {
+      await queryClient.cancelQueries({ queryKey: ["bookings"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["bookings"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: [...p.data, { ...dto, id: "temp-" + Date.now() }] });
+        }
+      });
+      return { snapshots };
     },
-    onError: (err: ApiError) => console.error("Create booking failed:", err.message),
+    onError: (_err, _vars, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["bookings"] }); },
   });
 }
 
@@ -35,10 +45,20 @@ export function useUpdateBooking() {
   return useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: UpdateBookingDto }) =>
       api.patch<Booking>(`/bookings/${id}`, dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    onMutate: async ({ id, dto }) => {
+      await queryClient.cancelQueries({ queryKey: ["bookings"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["bookings"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: p.data.map((item: any) => item.id === id ? { ...item, ...dto } : item) });
+        }
+      });
+      return { snapshots };
     },
-    onError: (err: ApiError) => console.error("Update booking failed:", err.message),
+    onError: (_err, _vars, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["bookings"] }); },
   });
 }
 
@@ -70,9 +90,19 @@ export function useDeleteBooking() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/bookings/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["bookings"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["bookings"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: p.data.filter((item: any) => item.id !== id) });
+        }
+      });
+      return { snapshots };
     },
-    onError: (err: ApiError) => console.error("Delete booking failed:", err.message),
+    onError: (_err, _id, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["bookings"] }); },
   });
 }

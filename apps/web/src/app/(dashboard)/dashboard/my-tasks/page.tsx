@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, MapPin, FileText, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Building2, Users, MapPin, FileText, CheckCircle, Clock, AlertCircle, ClipboardList } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import type { LucideIcon } from "lucide-react";
 import { useSiteVisits, useBookings, useLeads, useProperties } from "@/hooks/api";
 import { useCurrentUser } from "@/hooks/api";
@@ -90,7 +91,7 @@ export default function MyTasksPage() {
         <CardHeader><CardTitle className="text-lg">All Tasks</CardTitle></CardHeader>
         <CardContent>
           {tasks.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No tasks assigned to you yet</p>
+            <EmptyState icon={<ClipboardList className="h-12 w-12" />} title="No tasks assigned to you yet" description="Tasks assigned to you will appear here" />
           ) : (
             <div className="space-y-2">
               {tasks.map((t) => {

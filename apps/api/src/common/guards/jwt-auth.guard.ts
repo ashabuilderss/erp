@@ -6,14 +6,10 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { PUBLIC_KEY } from '../decorators/roles.decorator';
-import { PrismaService } from '../../config/prisma.service';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(
-    private reflector: Reflector,
-    private prisma: PrismaService,
-  ) {
+  constructor(private reflector: Reflector) {
     super();
   }
 
@@ -23,10 +19,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       context.getClass(),
     ]);
     if (isPublic) return true;
-
-    if (!process.env.AUTH_SECRET && process.env.NODE_ENV !== 'production') {
-      return this.devFallback(context);
-    }
 
     const result = (await super.canActivate(context)) as boolean;
     if (!result) return false;
@@ -53,29 +45,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw new UnauthorizedException('User not assigned to a company');
     }
 
-    return true;
-    /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-  }
-
-  private async devFallback(context: ExecutionContext): Promise<boolean> {
-    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-    const request = context.switchToHttp().getRequest();
-    const company = await this.prisma.company.findFirst({
-      where: { slug: 'default-company' },
-    });
-    request.user = {
-      id: 'dev-user',
-      clerkId: 'dev-user',
-      email: 'dev@example.com',
-      firstName: 'Dev',
-      lastName: 'User',
-      role: 'ADMIN',
-      companyId: company?.id ?? 'dev-company',
-      employeeId: null,
-    };
-    request.company = company
-      ? { id: company.id, name: company.name, slug: company.slug }
-      : { id: 'dev-company', name: 'Dev Company', slug: 'dev-company' };
     return true;
     /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
   }

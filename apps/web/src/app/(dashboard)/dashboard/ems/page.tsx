@@ -9,7 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { usePerformance, useCreatePerformance, useUpdatePerformance, useDeletePerformance, useAssignments, useCreateAssignment, useUpdateAssignment, useDeleteAssignment, useEmployees, useProperties, useLeads, useSiteVisits, useBookings } from "@/hooks/api";
+import { useToast } from "@/components/ui/toast";
+import { getApiErrorMessage } from "@/lib/api";
 import type {
   Assignment,
   AssignmentType,
@@ -64,6 +67,8 @@ export default function EMSPage() {
     }
   };
 
+  const { showToast } = useToast();
+
   const [aQuery, setAQuery] = useState({ page: 1, limit: 5, sortBy: "createdAt", sortOrder: "desc" as const });
   const { data: assignData, isLoading: assignLoading } = useAssignments(aQuery);
   const createAssign = useCreateAssignment();
@@ -72,7 +77,9 @@ export default function EMSPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignEdit, setAssignEdit] = useState<Assignment | null>(null);
   const [assignForm, setAssignForm] = useState<AssignmentForm>({});
-  const resetAssignForm = () => setAssignForm({ employeeId: "", type: "PROPERTY", entityId: "", notes: "" });
+  const [confirmPerfDelete, setConfirmPerfDelete] = useState<string | null>(null);
+  const [confirmAssignDelete, setConfirmAssignDelete] = useState<string | null>(null);
+  const resetAssignForm = () => setAssignForm({ employeeId: "", type: "PROPERTY", entityId: "", notes: "", startDate: "", endDate: "" });
 
   const perfColumns: ColumnDef<Performance>[] = [
     { accessorKey: "employeeId", header: "Employee", cell: ({ row }) => <span className="font-medium">{row.original.employeeId}</span> },
@@ -82,8 +89,8 @@ export default function EMSPage() {
     { accessorKey: "notes", header: "Notes", cell: ({ row }) => <span className="text-muted-foreground">{row.original.notes || "-"}</span> },
     { id: "act", header: "", cell: ({ row }) => (
       <div className="flex gap-1">
-        <Button variant="ghost" size="icon-sm" onClick={() => { setPerfEdit(row.original); setPerfForm({ ...row.original, notes: row.original.notes ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Delete?")) delPerf.mutate(row.original.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => { setPerfEdit(row.original); setPerfForm({ employeeId: row.original.employeeId, year: row.original.year, quarter: row.original.quarter, score: row.original.score, notes: row.original.notes ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmPerfDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
       </div>
     )},
   ];
@@ -95,8 +102,8 @@ export default function EMSPage() {
     { accessorKey: "notes", header: "Notes", cell: ({ row }) => <span className="text-muted-foreground">{row.original.notes || "-"}</span> },
     { id: "act", header: "", cell: ({ row }) => (
       <div className="flex gap-1">
-        <Button variant="ghost" size="icon-sm" onClick={() => { setAssignEdit(row.original); setAssignForm({ ...row.original, notes: row.original.notes ?? undefined, startDate: row.original.startDate ?? undefined, endDate: row.original.endDate ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Delete?")) delAssign.mutate(row.original.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => { setAssignEdit(row.original); setAssignForm({ employeeId: row.original.employeeId, type: row.original.type, entityId: row.original.entityId, notes: row.original.notes ?? undefined, startDate: row.original.startDate ?? undefined, endDate: row.original.endDate ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmAssignDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
       </div>
     )},
   ];
@@ -120,7 +127,7 @@ export default function EMSPage() {
                 <div><label className="text-sm font-medium">Notes</label><Input value={perfForm.notes || ""} onChange={(e) => setPerfForm({ ...perfForm, notes: e.target.value } as PerformanceForm)} /></div>
               </div>
               <DialogFooter showCloseButton>
-                <Button onClick={() => { if (perfEdit) { updatePerf.mutate({ id: perfEdit.id, dto: perfForm as UpdatePerformanceDto }); setPerfEdit(null); } else { createPerf.mutate(perfForm as CreatePerformanceDto); setPerfOpen(false); resetPerfForm(); } }} disabled={createPerf.isPending || updatePerf.isPending}>Save</Button>
+                <Button onClick={() => { if (perfEdit) { updatePerf.mutate({ id: perfEdit.id, dto: perfForm as UpdatePerformanceDto }, { onSuccess: () => { setPerfEdit(null); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update performance"), "error") }); } else { createPerf.mutate(perfForm as CreatePerformanceDto, { onSuccess: () => { setPerfOpen(false); resetPerfForm(); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create performance"), "error") }); } }} disabled={createPerf.isPending || updatePerf.isPending}>Save</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -137,7 +144,7 @@ export default function EMSPage() {
               <div><label className="text-sm font-medium">Score</label><Input type="number" min={0} max={100} value={perfForm.score || 0} onChange={(e) => setPerfForm({ ...perfForm, score: Number(e.target.value) } as PerformanceForm)} /></div>
               <div><label className="text-sm font-medium">Notes</label><Input value={perfForm.notes || ""} onChange={(e) => setPerfForm({ ...perfForm, notes: e.target.value } as PerformanceForm)} /></div>
             </div>
-            <DialogFooter showCloseButton><Button onClick={() => { if (perfEdit) { updatePerf.mutate({ id: perfEdit.id, dto: perfForm as UpdatePerformanceDto }); setPerfEdit(null); } }} disabled={updatePerf.isPending}>Save</Button></DialogFooter>
+            <DialogFooter showCloseButton><Button onClick={() => { if (perfEdit) { updatePerf.mutate({ id: perfEdit.id, dto: perfForm as UpdatePerformanceDto }, { onSuccess: () => { setPerfEdit(null); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update performance"), "error") }); } }} disabled={updatePerf.isPending}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -153,10 +160,14 @@ export default function EMSPage() {
                 <div><label className="text-sm font-medium">Employee</label><Select value={assignForm.employeeId || ""} onValueChange={(v) => setAssignForm({ ...assignForm, employeeId: v } as AssignmentForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
                 <div><label className="text-sm font-medium">Type</label><Select value={assignForm.type || "PROPERTY"} onValueChange={(v) => { setAssignForm({ ...assignForm, type: v, entityId: "" } as AssignmentForm); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PROPERTY">Property</SelectItem><SelectItem value="LEAD">Lead</SelectItem><SelectItem value="SITE_VISIT">Site Visit</SelectItem><SelectItem value="BOOKING">Booking</SelectItem></SelectContent></Select></div>
                 <div><label className="text-sm font-medium">Entity</label><Select value={assignForm.entityId || ""} onValueChange={(v) => setAssignForm({ ...assignForm, entityId: v } as AssignmentForm)}><SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger><SelectContent>{getEntitiesByType(assignForm.type || "PROPERTY").map((e) => <SelectItem key={e.id} value={e.id}>{e.label}</SelectItem>)}</SelectContent></Select></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="text-sm font-medium">Start Date</label><Input type="date" value={assignForm.startDate || ""} onChange={(e) => setAssignForm({ ...assignForm, startDate: e.target.value } as AssignmentForm)} /></div>
+                  <div><label className="text-sm font-medium">End Date</label><Input type="date" value={assignForm.endDate || ""} onChange={(e) => setAssignForm({ ...assignForm, endDate: e.target.value } as AssignmentForm)} /></div>
+                </div>
                 <div><label className="text-sm font-medium">Notes</label><Input value={assignForm.notes || ""} onChange={(e) => setAssignForm({ ...assignForm, notes: e.target.value } as AssignmentForm)} /></div>
               </div>
               <DialogFooter showCloseButton>
-                <Button onClick={() => { if (assignEdit) { updateAssign.mutate({ id: assignEdit.id, dto: assignForm as UpdateAssignmentDto }); setAssignEdit(null); } else { createAssign.mutate(assignForm as CreateAssignmentDto); setAssignOpen(false); resetAssignForm(); } }} disabled={createAssign.isPending || updateAssign.isPending}>Save</Button>
+                <Button onClick={() => { if (assignEdit) { updateAssign.mutate({ id: assignEdit.id, dto: assignForm as UpdateAssignmentDto }, { onSuccess: () => { setAssignEdit(null); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update assignment"), "error") }); } else { createAssign.mutate(assignForm as CreateAssignmentDto, { onSuccess: () => { setAssignOpen(false); resetAssignForm(); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create assignment"), "error") }); } }} disabled={createAssign.isPending || updateAssign.isPending}>Save</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -169,10 +180,42 @@ export default function EMSPage() {
               <div><label className="text-sm font-medium">Type</label><Select value={assignForm.type || "PROPERTY"} onValueChange={(v) => setAssignForm({ ...assignForm, type: v } as AssignmentForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PROPERTY">Property</SelectItem><SelectItem value="LEAD">Lead</SelectItem><SelectItem value="SITE_VISIT">Site Visit</SelectItem><SelectItem value="BOOKING">Booking</SelectItem></SelectContent></Select></div>
               <div><label className="text-sm font-medium">Entity ID</label><Input value={assignForm.entityId || ""} onChange={(e) => setAssignForm({ ...assignForm, entityId: e.target.value } as AssignmentForm)} /></div>
             </div>
-            <DialogFooter showCloseButton><Button onClick={() => { if (assignEdit) { updateAssign.mutate({ id: assignEdit.id, dto: assignForm as UpdateAssignmentDto }); setAssignEdit(null); } }} disabled={updateAssign.isPending}>Save</Button></DialogFooter>
+            <DialogFooter showCloseButton><Button onClick={() => { if (assignEdit) { updateAssign.mutate({ id: assignEdit.id, dto: assignForm as UpdateAssignmentDto }, { onSuccess: () => { setAssignEdit(null); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update assignment"), "error") }); } }} disabled={updateAssign.isPending}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmPerfDelete}
+        onOpenChange={(o) => { if (!o) setConfirmPerfDelete(null); }}
+        title="Delete Performance Review"
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmPerfDelete) {
+            delPerf.mutate(confirmPerfDelete, { onError: (err) => showToast(getApiErrorMessage(err, "Failed to delete"), "error") });
+          }
+          setConfirmPerfDelete(null);
+        }}
+        loading={delPerf.isPending}
+      >
+        Are you sure you want to delete this performance review?
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!confirmAssignDelete}
+        onOpenChange={(o) => { if (!o) setConfirmAssignDelete(null); }}
+        title="Delete Assignment"
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmAssignDelete) {
+            delAssign.mutate(confirmAssignDelete, { onError: (err) => showToast(getApiErrorMessage(err, "Failed to delete"), "error") });
+          }
+          setConfirmAssignDelete(null);
+        }}
+        loading={delAssign.isPending}
+      >
+        Are you sure you want to delete this assignment?
+      </ConfirmDialog>
     </div>
   );
 }

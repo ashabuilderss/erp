@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   ColumnDef,
   flexRender,
@@ -12,7 +12,7 @@ import {
   SortingState,
   PaginationState,
 } from "@tanstack/react-table";
-import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Search, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData, TValue> {
@@ -55,8 +56,24 @@ export function DataTable<TData, TValue>({
     pageSize: 10,
   });
   const [globalFilter, setGlobalFilter] = useState("");
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const debouncedSearchRef = useRef("");
 
-  const isServerPagination = !!pageCount && !!onPaginationChange;
+  const isServerPagination = !!onPaginationChange;
+
+  const handleSearchChange = useCallback((value: string) => {
+    if (!onSearchChange) {
+      setGlobalFilter(value);
+      return;
+    }
+    setGlobalFilter(value);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    debouncedSearchRef.current = value;
+    searchTimeoutRef.current = setTimeout(() => {
+      onSearchChange(value);
+    }, 300);
+  }, [onSearchChange]);
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -77,7 +94,7 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     ...(isServerPagination
-      ? { manualPagination: true, pageCount }
+      ? { manualPagination: true, pageCount: pageCount ?? -1 }
       : { getFilteredRowModel: getFilteredRowModel(), getPaginationRowModel: getPaginationRowModel() }),
   });
 
@@ -95,10 +112,7 @@ export function DataTable<TData, TValue>({
             <Input
               placeholder={`Search ${searchKey || "..."}`}
               value={globalFilter}
-              onChange={(e) => {
-                setGlobalFilter(e.target.value);
-                onSearchChange?.(e.target.value);
-              }}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9"
             />
           </div>
@@ -134,15 +148,23 @@ export function DataTable<TData, TValue>({
             </thead>
             <tbody className="[&_tr:last-child]:border-0">
               {isLoading ? (
-                <tr>
-                  <td colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                    Loading...
-                  </td>
-                </tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="border-b">
+                    {Array.from({ length: columns.length }).map((_, j) => (
+                      <td key={j} className="p-3">
+                        <Skeleton className={cn("h-4", j === 0 ? "w-3/4" : j === columns.length - 1 ? "w-1/4" : "w-1/2")} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                    No data found
+                  <td colSpan={columns.length} className="h-32 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <Inbox className="h-8 w-8" />
+                      <p className="text-sm font-medium">No data found</p>
+                      <p className="text-xs">Try adjusting your search or filters</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -163,6 +185,7 @@ export function DataTable<TData, TValue>({
           </table>
         </div>
 
+        {total > 0 || (!isLoading && !isServerPagination) ? (
         <div className="border-t px-4 py-3 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             Showing {from} to {to} of {total} results
@@ -229,6 +252,7 @@ export function DataTable<TData, TValue>({
             </div>
           </div>
         </div>
+        ) : null}
       </div>
     </div>
   );

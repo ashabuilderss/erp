@@ -11,12 +11,19 @@ import type {
   UserRole,
 } from "@/lib/types";
 
-export interface CreateEmployeeWithUserDto extends CreateEmployeeDto {
+export interface CreateEmployeeWithUserDto {
   email: string;
   firstName: string;
   lastName: string;
+  password: string;
+  employeeCode?: string;
+  departmentId: string;
+  designationId: string;
+  phone?: string;
+  salary?: number;
+  address?: string;
+  dateOfJoining?: string;
   role?: UserRole;
-  password?: string;
 }
 
 export function useEmployees(query: QueryEmployeeDto = {}, options?: { enabled?: boolean }) {
@@ -40,10 +47,20 @@ export function useCreateEmployee() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: CreateEmployeeDto) => api.post<Employee>("/employees", dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    onMutate: async (dto) => {
+      await queryClient.cancelQueries({ queryKey: ["employees"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["employees"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: [...p.data, { ...dto, id: "temp-" + Date.now() }] });
+        }
+      });
+      return { snapshots };
     },
-    onError: (err: ApiError) => console.error("Create employee failed:", err.message),
+    onError: (_err, _vars, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["employees"] }); },
   });
 }
 
@@ -52,10 +69,20 @@ export function useUpdateEmployee() {
   return useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: UpdateEmployeeDto }) =>
       api.patch<Employee>(`/employees/${id}`, dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    onMutate: async ({ id, dto }) => {
+      await queryClient.cancelQueries({ queryKey: ["employees"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["employees"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: p.data.map((item: any) => item.id === id ? { ...item, ...dto } : item) });
+        }
+      });
+      return { snapshots };
     },
-    onError: (err: ApiError) => console.error("Update employee failed:", err.message),
+    onError: (_err, _vars, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["employees"] }); },
   });
 }
 
@@ -63,10 +90,20 @@ export function useDeleteEmployee() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/employees/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["employees"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["employees"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: p.data.filter((item: any) => item.id !== id) });
+        }
+      });
+      return { snapshots };
     },
-    onError: (err: ApiError) => console.error("Delete employee failed:", err.message),
+    onError: (_err, _id, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["employees"] }); },
   });
 }
 

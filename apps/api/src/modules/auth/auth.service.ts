@@ -5,15 +5,25 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { PrismaService } from '../../config/prisma.service';
 import { LoggerService } from '../../common/logger/logger.service';
 import { Prisma, UserRole } from '@prisma/client';
+import { TwoFactorService } from './two-factor.service';
+import {
+  getPermissionsForRole,
+  mergePermissionsWithGrants,
+} from '../../common/auth/permissions';
 
 const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 interface CreateEmployeeWithUserDto {
   email: string;
@@ -35,20 +45,37 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private eventEmitter: EventEmitter2,
     private logger: LoggerService,
+    private twoFactorService: TwoFactorService,
   ) {}
 
-  async login(email: string, password: string) {
+  async getEffectivePermissions(userId: string, role: UserRole) {
+    const grants = await this.prisma.permissionGrant.findMany({
+      where: { userId },
+      select: { permission: true, granted: true },
+    });
+    return mergePermissionsWithGrants(getPermissionsForRole(role), grants);
+  }
+
+  async login(email: string, password: string, ipAddress?: string) {
     const user = await this.prisma.user.findFirst({
       where: { email, isActive: true },
     });
     if (!user || !user.hashedPassword) {
+      this.eventEmitter.emit('security.login.failure', { email, reason: 'User not found or no password', ipAddress });
       throw new UnauthorizedException('Invalid email or password');
     }
     const valid = await bcrypt.compare(password, user.hashedPassword);
     if (!valid) {
+      this.eventEmitter.emit('security.login.failure', { email, reason: 'Invalid password', ipAddress });
       throw new UnauthorizedException('Invalid email or password');
     }
+
+    if (user.totpEnabled) {
+      return this.twoFactorService.generateChallenge(user.id, user.companyId);
+    }
+
     const employee = await this.prisma.employee.findUnique({
       where: { userId: user.id },
       select: { id: true },
@@ -67,6 +94,13 @@ export class AuthService {
     });
     const refreshToken = await this.createRefreshToken(user.id, user.companyId);
 
+    this.eventEmitter.emit('security.login.success', {
+      userId: user.id,
+      companyId: user.companyId,
+      email: user.email,
+      ipAddress,
+    });
+
     return {
       accessToken,
       refreshToken: refreshToken.token,
@@ -84,8 +118,9 @@ export class AuthService {
   }
 
   async refresh(refreshTokenStr: string) {
+    const tokenHash = hashToken(refreshTokenStr);
     const stored = await this.prisma.refreshToken.findUnique({
-      where: { token: refreshTokenStr },
+      where: { token: tokenHash },
       include: { user: { include: { employee: true } } },
     });
 
@@ -123,8 +158,9 @@ export class AuthService {
   }
 
   async revokeRefreshToken(token: string) {
+    const tokenHash = hashToken(token);
     await this.prisma.refreshToken.updateMany({
-      where: { token, revokedAt: null },
+      where: { token: tokenHash, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
@@ -137,15 +173,16 @@ export class AuthService {
   }
 
   private async createRefreshToken(userId: string, companyId: string) {
-    const token = randomBytes(48).toString('hex');
+    const rawToken = randomBytes(48).toString('hex');
+    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 
-    const created = await this.prisma.refreshToken.create({
-      data: { token, userId, companyId, expiresAt },
+    await this.prisma.refreshToken.create({
+      data: { token: tokenHash, userId, companyId, expiresAt },
     });
 
-    return created;
+    return { token: rawToken };
   }
 
   private DESIGNATION_PREFIXES: Record<string, string> = {
@@ -199,7 +236,7 @@ export class AuthService {
     }
 
     const employeeCode =
-      dto.employeeCode ??
+      dto.employeeCode?.trim() ||
       (await this.generateEmployeeCode(dto.designationId, companyId));
 
     const existingEmployee = await this.prisma.employee.findFirst({
@@ -271,6 +308,13 @@ export class AuthService {
     return this.prisma.employee.findUnique({
       where: { userId },
       select: { id: true, employeeCode: true },
+    });
+  }
+
+  async getFullUser(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { totpEnabled: true },
     });
   }
 }

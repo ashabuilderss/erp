@@ -1,22 +1,18 @@
-import { Module, OnModuleInit, Logger } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { EncryptionService } from '../../common/services/encryption.service';
+import { TwoFactorService } from './two-factor.service';
+import { TwoFactorController } from './two-factor.controller';
 
 function validateAuthSecret(): void {
   const secret = process.env.AUTH_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        'FATAL: AUTH_SECRET environment variable is required in production',
-      );
-    }
-    Logger.warn(
-      'AUTH_SECRET not set — using fallback. Set AUTH_SECRET in production.',
-      'AuthModule',
+    throw new Error(
+      'FATAL: AUTH_SECRET environment variable is required. Set AUTH_SECRET in your .env file.',
     );
   }
 }
@@ -28,15 +24,15 @@ function validateAuthSecret(): void {
       useFactory: () => {
         validateAuthSecret();
         return {
-          secret: process.env.AUTH_SECRET || 'fallback-dev-only',
+          secret: process.env.AUTH_SECRET,
           signOptions: { expiresIn: '15m' },
         };
       },
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, EncryptionService],
-  exports: [JwtModule, AuthService, EncryptionService],
+  controllers: [AuthController, TwoFactorController],
+  providers: [AuthService, TwoFactorService, JwtStrategy, EncryptionService],
+  exports: [JwtModule, AuthService, TwoFactorService, EncryptionService],
 })
 export class AuthModule implements OnModuleInit {
   onModuleInit() {

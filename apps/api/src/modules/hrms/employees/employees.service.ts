@@ -94,7 +94,7 @@ export class EmployeesService {
     }
 
     const employeeCode =
-      dto.employeeCode ??
+      dto.employeeCode?.trim() ||
       (await this.generateEmployeeCode(dto.designationId, companyId));
 
     const existingCode = await this.prisma.employee.findUnique({
@@ -136,6 +136,7 @@ export class EmployeesService {
         salary: dto.salary ? new Prisma.Decimal(dto.salary) : null,
         address: dto.address,
         status: dto.status ?? 'ACTIVE',
+        staffType: dto.staffType,
       },
       include: {
         user: true,

@@ -30,6 +30,17 @@ export interface SeedCompanyCounts {
 const LOCAL_DEFAULT_PASSWORD = "Admin@123";
 const LOCAL_DEMO_USERS: DemoSeedUser[] = [
   {
+    email: "owner@company.com",
+    password: "Owner@123",
+    firstName: "Owner",
+    lastName: "User",
+    role: UserRole.OWNER,
+    employeeCode: "OWN-001",
+    department: "Operations",
+    designation: "Operations Manager",
+    phone: "+91 98765 10000",
+  },
+  {
     email: "admin@company.com",
     password: LOCAL_DEFAULT_PASSWORD,
     firstName: "Admin",

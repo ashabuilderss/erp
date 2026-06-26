@@ -30,6 +30,10 @@ export class AssignmentsService {
       throw new BadRequestException(
         `Employee with ID ${dto.employeeId} not found`,
       );
+    if (employee.companyId !== companyId)
+      throw new BadRequestException(
+        `Employee with ID ${dto.employeeId} does not belong to this company`,
+      );
 
     const entityExists = await this.validateEntity(
       dto.type,

@@ -13,6 +13,8 @@ import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { QueryDepartmentDto } from './dto/query-department.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { Permissions } from '../../../common/auth/permissions';
 import { CurrentCompany } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
@@ -22,6 +24,7 @@ export class DepartmentsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.DEPARTMENT_CREATE)
   async create(
     @Body() dto: CreateDepartmentDto,
     @CurrentCompany('id') companyId: string,
@@ -31,6 +34,7 @@ export class DepartmentsController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.DEPARTMENT_READ)
   async findAll(
     @Query() query: QueryDepartmentDto,
     @CurrentCompany('id') companyId: string,
@@ -40,6 +44,7 @@ export class DepartmentsController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.DEPARTMENT_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -49,6 +54,7 @@ export class DepartmentsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.DEPARTMENT_UPDATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateDepartmentDto,
@@ -59,6 +65,7 @@ export class DepartmentsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.DEPARTMENT_DELETE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

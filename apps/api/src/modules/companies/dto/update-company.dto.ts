@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsObject } from 'class-validator';
 
 export class UpdateCompanyDto {
   @IsOptional()
@@ -12,4 +12,8 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  settings?: Record<string, unknown>;
 }

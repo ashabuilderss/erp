@@ -5,6 +5,9 @@ import { EmployeesModule } from './employees/employees.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { LeaveRequestsModule } from './leave-requests/leave-requests.module';
 import { LeaveAllocationsModule } from './leave-allocations/leave-allocations.module';
+import { DeviceRegistrationsModule } from './device-registrations/device-registrations.module';
+import { AttendanceCorrectionsModule } from './attendance-corrections/attendance-corrections.module';
+import { PayrollModule } from './payroll/payroll.module';
 
 @Module({
   imports: [
@@ -14,6 +17,9 @@ import { LeaveAllocationsModule } from './leave-allocations/leave-allocations.mo
     AttendanceModule,
     LeaveRequestsModule,
     LeaveAllocationsModule,
+    DeviceRegistrationsModule,
+    AttendanceCorrectionsModule,
+    PayrollModule,
   ],
 })
 export class HrmsModule {}

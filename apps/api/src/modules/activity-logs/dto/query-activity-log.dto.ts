@@ -1,20 +1,8 @@
 import { IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
+import { BaseQueryDto } from '../../../common/dto/base-query.dto';
 
-export class QueryActivityLogDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 20;
-
+export class QueryActivityLogDto extends BaseQueryDto {
   @IsOptional()
   @IsString()
   action?: string;
@@ -25,9 +13,9 @@ export class QueryActivityLogDto {
 
   @IsOptional()
   @IsString()
-  search?: string;
+  performedById?: string;
 
   @IsOptional()
   @IsString()
-  performedById?: string;
+  format?: 'csv' | 'json';
 }

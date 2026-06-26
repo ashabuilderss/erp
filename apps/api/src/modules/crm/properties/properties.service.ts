@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../config/prisma.service';
+import { TransitionService } from '../../../common/services/transition.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { QueryPropertyDto } from './dto/query-property.dto';
@@ -29,6 +30,7 @@ export class PropertiesService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private transitionService: TransitionService,
   ) {}
 
   async getMyProperties(employeeId: string, companyId: string) {
@@ -39,7 +41,21 @@ export class PropertiesService {
     });
   }
 
-  async create(dto: CreatePropertyDto, companyId: string) {
+  async create(dto: CreatePropertyDto, companyId: string, currentUserRole?: string, currentEmployeeId?: string) {
+    if (dto.assignedToEmployeeId) {
+      const assigned = await this.prisma.employee.findFirst({
+        where: { id: dto.assignedToEmployeeId, companyId },
+      });
+      if (!assigned) {
+        throw new BadRequestException('Assigned employee not found in your company');
+      }
+    }
+
+    // Employees can only create properties assigned to themselves
+    if (currentUserRole === 'EMPLOYEE' && dto.assignedToEmployeeId !== currentEmployeeId) {
+      throw new BadRequestException('Employees can only create properties assigned to themselves');
+    }
+
     const property = await this.prisma.property.create({
       data: {
         ...dto,
@@ -129,9 +145,9 @@ export class PropertiesService {
     };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: string, companyId: string, employeeId?: string) {
     const property = await this.prisma.property.findFirst({
-      where: { id, companyId },
+      where: { id, companyId, ...(employeeId && { assignedToEmployeeId: employeeId }) },
       include: {
         assignedTo: {
           include: { user: true },
@@ -149,8 +165,24 @@ export class PropertiesService {
     return property;
   }
 
-  async update(id: string, dto: UpdatePropertyDto, companyId: string) {
-    await this.findOne(id, companyId);
+  async update(id: string, dto: UpdatePropertyDto, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+    const existing = await this.findOne(id, companyId, employeeId);
+
+    // Validate assignedToEmployeeId change
+    if (dto.assignedToEmployeeId !== undefined && dto.assignedToEmployeeId !== existing.assignedToEmployeeId) {
+      if (dto.assignedToEmployeeId) {
+        const assigned = await this.prisma.employee.findFirst({
+          where: { id: dto.assignedToEmployeeId, companyId },
+        });
+        if (!assigned) {
+          throw new BadRequestException('Assigned employee not found in your company');
+        }
+      }
+      // Employees cannot reassign properties to other employees
+      if (currentUserRole === 'EMPLOYEE') {
+        throw new BadRequestException('Employees cannot reassign properties');
+      }
+    }
 
     const data: Prisma.PropertyUpdateInput = { ...dto };
 
@@ -174,26 +206,14 @@ export class PropertiesService {
     return updated;
   }
 
-  async updateStatus(id: string, status: PropertyStatus, companyId: string) {
-    const property = await this.findOne(id, companyId);
-
-    const validTransitions: Record<PropertyStatus, PropertyStatus[]> = {
-      AVAILABLE: ['RESERVED', 'SOLD'],
-      RESERVED: ['AVAILABLE', 'BOOKED'],
-      BOOKED: ['SOLD', 'RESERVED'],
-      SOLD: [],
-    };
-
-    const allowed = validTransitions[property.status] || [];
-    if (!allowed.includes(status)) {
-      throw new BadRequestException(
-        `Invalid status transition from ${property.status} to ${status}`,
-      );
-    }
-
-    const updated = await this.prisma.property.update({
-      where: { id },
-      data: { status },
+  async updateStatus(id: string, status: PropertyStatus, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+    const updated = await this.transitionService.execute({
+      entityType: 'Property',
+      id,
+      newStatus: status,
+      companyId,
+      currentUserRole,
+      currentEmployeeId,
       include: {
         assignedTo: {
           include: { user: true },

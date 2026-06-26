@@ -117,38 +117,15 @@ async function runPlaywright(args, env) {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  let output = "";
-  let settled = false;
-
   return new Promise((resolve) => {
-    const finish = (code, kill = false) => {
-      if (settled) return;
-      settled = true;
-      if (kill && test.exitCode === null) test.kill("SIGTERM");
-      resolve(code);
-    };
-
     const handleOutput = (chunk, target) => {
-      const text = chunk.toString();
       target.write(chunk);
-      output += text;
-      const normalizedOutput = output.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
-      const lowerOutput = normalizedOutput.toLowerCase();
-
-      if (lowerOutput.includes(" failed")) {
-        setTimeout(() => finish(1, true), 250);
-        return;
-      }
-
-      if (lowerOutput.includes(" passed")) {
-        setTimeout(() => finish(0, true), 250);
-      }
     };
 
     test.stdout.on("data", (chunk) => handleOutput(chunk, process.stdout));
     test.stderr.on("data", (chunk) => handleOutput(chunk, process.stderr));
-    test.on("close", (code) => finish(code ?? 1));
-    test.on("error", () => finish(1));
+    test.on("close", (code) => resolve(code ?? 1));
+    test.on("error", () => resolve(1));
   });
 }
 

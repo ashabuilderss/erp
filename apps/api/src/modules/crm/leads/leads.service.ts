@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../config/prisma.service';
+import { TransitionService } from '../../../common/services/transition.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
@@ -26,6 +27,7 @@ export class LeadsService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private transitionService: TransitionService,
   ) {}
 
   async getMyLeads(employeeId: string, companyId: string) {
@@ -36,8 +38,40 @@ export class LeadsService {
     });
   }
 
-  async create(dto: CreateLeadDto, companyId: string) {
+  async create(dto: CreateLeadDto, companyId: string, currentUserRole?: string, currentEmployeeId?: string) {
     const { customerId, ...rest } = dto;
+
+    if (dto.assignedToEmployeeId) {
+      const assigned = await this.prisma.employee.findFirst({
+        where: { id: dto.assignedToEmployeeId, companyId },
+      });
+      if (!assigned) {
+        throw new BadRequestException('Assigned employee not found in your company');
+      }
+    }
+
+    if (dto.propertyId) {
+      const property = await this.prisma.property.findFirst({
+        where: { id: dto.propertyId, companyId },
+      });
+      if (!property) {
+        throw new BadRequestException('Property not found in your company');
+      }
+    }
+
+    if (customerId) {
+      const cust = await this.prisma.customer.findFirst({
+        where: { id: customerId, companyId },
+      });
+      if (!cust) {
+        throw new BadRequestException('Customer not found in your company');
+      }
+    }
+
+    if (currentUserRole === 'EMPLOYEE' && dto.assignedToEmployeeId !== currentEmployeeId) {
+      throw new BadRequestException('Employees can only create leads assigned to themselves');
+    }
+
     const lead = await this.prisma.lead.create({
       data: {
         ...rest,
@@ -116,9 +150,9 @@ export class LeadsService {
     };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: string, companyId: string, employeeId?: string) {
     const lead = await this.prisma.lead.findFirst({
-      where: { id, companyId },
+      where: { id, companyId, ...(employeeId && { assignedToEmployeeId: employeeId }) },
       include: {
         property: true,
         assignedTo: {
@@ -137,8 +171,42 @@ export class LeadsService {
     return lead;
   }
 
-  async update(id: string, dto: UpdateLeadDto, companyId: string) {
-    const before = await this.findOne(id, companyId);
+  async update(id: string, dto: UpdateLeadDto, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+    const before = await this.findOne(id, companyId, employeeId);
+
+    if (dto.assignedToEmployeeId !== undefined && dto.assignedToEmployeeId !== before.assignedToEmployeeId) {
+      if (dto.assignedToEmployeeId) {
+        const assigned = await this.prisma.employee.findFirst({
+          where: { id: dto.assignedToEmployeeId, companyId },
+        });
+        if (!assigned) {
+          throw new BadRequestException('Assigned employee not found in your company');
+        }
+      }
+      if (currentUserRole === 'EMPLOYEE') {
+        throw new BadRequestException('Employees cannot reassign leads');
+      }
+    }
+
+    if (dto.propertyId !== undefined && dto.propertyId !== before.propertyId) {
+      const property = await this.prisma.property.findFirst({
+        where: { id: dto.propertyId, companyId },
+      });
+      if (!property) {
+        throw new BadRequestException('Property not found in your company');
+      }
+    }
+
+    if (dto.customerId !== undefined) {
+      if (dto.customerId) {
+        const cust = await this.prisma.customer.findFirst({
+          where: { id: dto.customerId, companyId },
+        });
+        if (!cust) {
+          throw new BadRequestException('Customer not found in your company');
+        }
+      }
+    }
 
     const { customerId, ...rest } = dto;
     const updateData: any = { ...rest };
@@ -181,29 +249,14 @@ export class LeadsService {
     return updated;
   }
 
-  async updateStatus(id: string, status: LeadStatus, companyId: string) {
-    const lead = await this.findOne(id, companyId);
-
-    const validTransitions: Record<LeadStatus, LeadStatus[]> = {
-      NEW: ['CONTACTED', 'LOST'],
-      CONTACTED: ['INTERESTED', 'LOST', 'NEW'],
-      INTERESTED: ['SITE_VISIT_SCHEDULED', 'NEGOTIATION', 'LOST', 'CONTACTED'],
-      SITE_VISIT_SCHEDULED: ['NEGOTIATION', 'CONVERTED', 'LOST', 'INTERESTED'],
-      NEGOTIATION: ['CONVERTED', 'LOST', 'SITE_VISIT_SCHEDULED'],
-      CONVERTED: [],
-      LOST: ['NEW', 'CONTACTED'],
-    };
-
-    const allowed = validTransitions[lead.status] || [];
-    if (!allowed.includes(status)) {
-      throw new BadRequestException(
-        `Invalid status transition from ${lead.status} to ${status}`,
-      );
-    }
-
-    const updated = await this.prisma.lead.update({
-      where: { id },
-      data: { status },
+  async updateStatus(id: string, status: LeadStatus, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+    const updated = await this.transitionService.execute({
+      entityType: 'Lead',
+      id,
+      newStatus: status,
+      companyId,
+      currentUserRole,
+      currentEmployeeId,
       include: {
         property: true,
         assignedTo: {
@@ -216,8 +269,8 @@ export class LeadsService {
     return updated;
   }
 
-  async convertToCustomer(id: string, companyId: string) {
-    const lead = await this.findOne(id, companyId);
+  async convertToCustomer(id: string, companyId: string, employeeId?: string) {
+    const lead = await this.findOne(id, companyId, employeeId);
 
     if (lead.status === 'CONVERTED' && lead.convertedToCustomerId) {
       throw new BadRequestException('Lead is already converted to a customer');

@@ -14,15 +14,15 @@ interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private prisma: PrismaService) {
     const secret = process.env.AUTH_SECRET;
-    if (!secret && process.env.NODE_ENV === 'production') {
+    if (!secret) {
       throw new Error(
-        'FATAL: AUTH_SECRET environment variable is required in production',
+        'FATAL: AUTH_SECRET environment variable is required. Set AUTH_SECRET in your .env file.',
       );
     }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret || 'fallback-dev-only',
+      secretOrKey: secret,
     });
   }
 
@@ -44,6 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       lastName: user.lastName,
       role: user.role,
       companyId: user.companyId,
+      employeeId: user.employee?.id ?? null,
       isActive: user.isActive,
       employee: user.employee,
       company: user.company,

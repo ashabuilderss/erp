@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER before running docker compose}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before running docker compose}
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB before running docker compose}
-    ports:
-      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
@@ -17,6 +15,29 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    container_name: dashboard-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD before running docker compose}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
 
   api:
     build:
@@ -29,22 +50,32 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET before running docker compose}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY before running docker compose}
       FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL before running docker compose}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD before running docker compose}@redis:6379
       PORT: 4000
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       api-migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
 
   api-migrate:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: dashboard-api-migrate
-    command: ["npx", "prisma", "db", "push", "--accept-data-loss"]
+    command: ["npx", "prisma", "migrate", "deploy"]
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL before running docker compose}
@@ -70,10 +101,17 @@ services:
       API_URL: ${WEB_API_URL:-http://api:4000}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
 
 volumes:
   postgres_data:
+  uploads_data:

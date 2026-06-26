@@ -25,15 +25,21 @@ export class PerformanceService {
   async create(dto: CreatePerformanceDto, companyId: string) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: dto.employeeId },
+      select: { companyId: true },
     });
     if (!employee)
       throw new BadRequestException(
         `Employee with ID ${dto.employeeId} not found`,
       );
+    if (employee.companyId !== companyId)
+      throw new BadRequestException(
+        `Employee with ID ${dto.employeeId} does not belong to this company`,
+      );
 
     const existing = await this.prisma.performance.findUnique({
       where: {
-        employeeId_year_quarter: {
+        companyId_employeeId_year_quarter: {
+          companyId: employee.companyId,
           employeeId: dto.employeeId,
           year: dto.year,
           quarter: dto.quarter,

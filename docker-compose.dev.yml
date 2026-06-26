@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./apps/api/src:/app/src
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+
+  web:
+    build:
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./apps/web/src:/app/src
+      - ./apps/web/public:/app/public
+      - /app/node_modules
+    environment:
+      NODE_ENV: development

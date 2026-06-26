@@ -41,7 +41,6 @@ export function useCreateLeaveRequest() {
       queryClient.invalidateQueries({ queryKey: ["leave-requests"] });
       queryClient.invalidateQueries({ queryKey: ["leave-requests", "pending-count"] });
     },
-    onError: (err: ApiError) => console.error("Create leave request failed:", err.message),
   });
 }
 
@@ -50,10 +49,20 @@ export function useUpdateLeaveRequest() {
   return useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: UpdateLeaveRequestDto }) =>
       api.patch<LeaveRequest>(`/leave-requests/${id}`, dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leave-requests"] });
+    onMutate: async ({ id, dto }) => {
+      await queryClient.cancelQueries({ queryKey: ["leave-requests"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["leave-requests"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: p.data.map((item: any) => item.id === id ? { ...item, ...dto } : item) });
+        }
+      });
+      return { snapshots };
     },
-    onError: (err: ApiError) => console.error("Update leave request failed:", err.message),
+    onError: (_err, _vars, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["leave-requests"] }); },
   });
 }
 
@@ -62,11 +71,10 @@ export function useApproveLeaveRequest() {
   return useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: ApproveLeaveRequestDto }) =>
       api.patch<LeaveRequest>(`/leave-requests/${id}/approve`, dto),
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["leave-requests"] });
       queryClient.invalidateQueries({ queryKey: ["leave-requests", "pending-count"] });
     },
-    onError: (err: ApiError) => console.error("Approve leave request failed:", err.message),
   });
 }
 
@@ -74,10 +82,22 @@ export function useDeleteLeaveRequest() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/leave-requests/${id}`),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["leave-requests"] });
+      const snapshots: { key: readonly unknown[]; data: unknown }[] = [];
+      queryClient.getQueriesData({ queryKey: ["leave-requests"] }).forEach(([key, prev]) => {
+        if (prev && typeof prev === "object" && "data" in (prev as any)) {
+          snapshots.push({ key, data: JSON.parse(JSON.stringify(prev)) });
+          const p = prev as { data: any[]; meta: any };
+          queryClient.setQueryData(key, { ...p, data: p.data.filter((item: any) => item.id !== id) });
+        }
+      });
+      return { snapshots };
+    },
+    onError: (_err, _id, ctx) => { ctx?.snapshots?.forEach((s) => queryClient.setQueryData(s.key, s.data)); },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["leave-requests"] });
       queryClient.invalidateQueries({ queryKey: ["leave-requests", "pending-count"] });
     },
-    onError: (err: ApiError) => console.error("Delete leave request failed:", err.message),
   });
 }

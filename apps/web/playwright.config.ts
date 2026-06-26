@@ -56,7 +56,7 @@ export default defineConfig({
             AUTH_SECRET:
               process.env.AUTH_SECRET ??
               process.env.WEB_E2E_AUTH_SECRET ??
-              "local-playwright-auth-secret-change-me",
+              "7c57fcac88f96277f229bf360b5543c95a6aafd70f6c4d0f8dd970c036d79dfe",
             NEXTAUTH_URL: baseURL,
             AUTH_URL: process.env.AUTH_URL ?? baseURL,
           },

@@ -1,41 +1,68 @@
-# Stabilization Tracker
+# Production Tracker
 
-Date: 2026-06-16
+Date: 2026-06-17
 
-## Goal
+## Current Verdict
 
-Prepare the RealEstate CRM project for an owner handoff by fixing concrete blockers, verifying the running app, and recording evidence.
+Phase 9 and Phase 10 are implemented and compile. The project is owner-demo ready only if the API and database are running locally. It is not final production ready yet because database migrations, Docker/runtime verification, browser E2E, and lint-warning cleanup still need closure.
 
-## Status: ALL GATES PASSED
+## Phase 9 - Security, Sessions, Upload Policy
 
-All previously identified blockers have been resolved in this session.
-
-| Gate | Result | Evidence |
+| Item | Status | Evidence |
 | --- | --- | --- |
-| **Lint warnings (web)** | **Cleaned: 0 errors, 0 warnings** | `npm run lint --workspace=apps/web` exits 0 with zero output |
-| **Lint warnings (API)** | **Cleaned: 0 errors, 0 warnings** | `npm run lint --workspace=apps/api` exits 0 with zero output |
-| **Lint:all** | **Passed** | `npm run lint:all` exits 0 |
-| **npm ci** | **Passed** | `npm ci` added 1238 packages in 3 minutes — no EPERM error |
-| **API build** | **Passed** | NestJS compiles successfully |
-| **Web build** | **Passed** | Next.js generates 22 static pages |
-| **API unit tests** | **Passed** | 10 passed, 10 total |
-| **API e2e tests** | **Passed** | 5 suites passed, 9 tests passed |
-| **Docker build** | **Passed** | 3 images built: `dashboard-api`, `dashboard-api-migrate`, `dashboard-web` |
-| **Docker run** | **Passed** | `docker compose up -d` — all 3 services healthy; API 200, Web 200 |
-| **Secrets generated** | **Done** | Fresh `AUTH_SECRET` and `ENCRYPTION_KEY` created via `crypto.randomBytes` |
-| **Backup scripts** | **Done** | `scripts/backup-db.sh` and `scripts/restore-db.sh` created |
-| **Git baseline** | **Committed** | `f1a88ea` — 328 files, 51,161 insertions |
+| Login attempt tracking | Done | `LoginAttempt` model and auth login recording added |
+| Session tracking | Done | `UserSession` model and refresh-token session creation added |
+| Security event audit | Done | `SecurityEvent` model, API endpoints, CSV export |
+| 2FA foundation | Done with limitation | Placeholder-safe setup/disable exists; TOTP verification intentionally refuses to enable until a real TOTP provider is added |
+| Upload policy | Done | 25MB max; JPG/PNG/WEBP/PDF/DOCX/MP3/WEBM/DWG policy; image uploads remain image-only |
+| Upload source handoff | Fixed | `.gitignore` now unignores `apps/api/src/modules/uploads/**` |
 
-## Verification Commands
+## Phase 10 - Reports, WhatsApp, Incentives
 
-```sh
-npm run lint:all       # 0 errors, 0 warnings
-npm run test:all       # 10 unit + 9 e2e = 19/19 passed
-npm run build:all      # Both workspaces compile
-docker compose build   # 3 images built
-docker compose up -d   # All services healthy
-```
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Report catalog/export history | Done | `/reports/catalog`, `/reports/exports` API and dashboard report UI |
+| WhatsApp templates/logs | Done | Mock/provider-ready template and send-log flow; `MOCKED` without provider token, `QUEUED` with provider token |
+| Incentive announcements | Done | Owner/admin create/list/update; employee active announcements |
+| Dashboard navigation | Done | Added Reports, Incentives, WhatsApp, Security routes/pages |
+| Web production build | Passed | `npm.cmd run build --workspace=apps/web` generated 43 routes including `/dashboard/security`, `/dashboard/incentives`, `/dashboard/whatsapp` |
 
-## Owner Handoff Verdict
+## Sample Users
 
-**Ready for production deployment.** All gates pass on this machine. The repository has an auditable Git baseline (`f1a88ea`), zero lint errors, all tests passing, Docker images built and verified, fresh production secrets generated, and backup/restore scripts documented.
+These are local/demo seed users only. Do not use these passwords in production.
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Owner | `owner@company.com` | `Owner@123` |
+| Admin | `admin@company.com` | `Admin@123` |
+| HR Manager | `hr@company.com` | `Hr@12345` |
+| Employee | `sales@company.com` | `Sales@12345` |
+| Employee | `agent@company.com` | `Agent@12345` |
+| Employee | `ops@company.com` | `Ops@12345` |
+
+## Verification Evidence
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| `npm.cmd run prisma:generate --workspace=apps/api` | Passed | Prisma Client generated for Phase 9/10 schema |
+| `npx.cmd tsc -p tsconfig.build.json --noEmit` in `apps/api` | Passed | Fixed stale `LEAVE` attendance-status usage |
+| `npm.cmd run build --workspace=apps/api` | Passed | `nest-cli.json` no longer deletes locked `dist` on Windows before compile |
+| `npm.cmd run build --workspace=apps/web` | Passed | Next.js production build completed |
+| `npm.cmd test --workspace=apps/api -- --runInBand` | Passed | 17/17 unit tests |
+| `npm.cmd test --workspace=apps/api -- file-policy.service.spec.ts security.service.spec.ts --runInBand` | Passed | 5/5 focused Phase 9 tests |
+| `npm.cmd run lint --workspace=apps/api` | Passes with warnings | 0 errors, 182 warnings remain |
+| `npm.cmd run lint --workspace=apps/web` | Passes with warnings | 0 errors, 71 warnings remain |
+| Browser check | Blocked for full E2E | Frontend responds at `http://localhost:3000`, API health at `http://localhost:4000/api/health` was unreachable, dashboard rendered blank while API was down |
+
+## Production Blockers
+
+1. Add and verify a real Prisma migration for the Phase 9/10 schema changes. Current Docker compose uses `prisma db push --accept-data-loss`, which is not a production migration strategy.
+2. Start API and database, then run browser E2E login and owner workflow testing.
+3. Verify Docker build/up with the real Docker daemon.
+4. Clean remaining lint warnings before calling the handoff pristine.
+5. Replace placeholder 2FA with a real TOTP implementation before advertising 2FA as complete.
+6. Configure real WhatsApp provider credentials and delivery callbacks before using it for live customer messages.
+
+## Owner Handoff Answer
+
+Not ready as final production. It is ready for an internal owner demo after starting API/database and seeding demo data. For production owner handoff, close the blockers above first.

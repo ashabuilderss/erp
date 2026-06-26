@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
   useLeaveAllocations,
   useCreateLeaveAllocation,
@@ -18,6 +19,9 @@ import {
 } from "@/hooks/api";
 import { useToast } from "@/components/ui/toast";
 import { getApiErrorMessage } from "@/lib/api";
+import { FieldError } from "@/components/shared/field-error";
+import { validateForm, clearFieldError } from "@/components/shared/form-validation";
+import type { ValidationRules } from "@/components/shared/form-validation";
 import type { CreateLeaveAllocationDto, LeaveAllocation, UpdateLeaveAllocationDto } from "@/lib/types";
 
 type LeaveAllocationForm = Partial<CreateLeaveAllocationDto> &
@@ -37,9 +41,11 @@ export default function LeaveAllocationsPage() {
   const { showToast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [editItem, setEditItem] = useState<LeaveAllocation | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const { data: empData } = useEmployees({ limit: 200 });
   const employees = empData?.data || [];
   const [form, setForm] = useState<LeaveAllocationForm>({});
+  const [errors, setErrors] = useState<Partial<Record<"employeeId" | "leaveType" | "totalDays", string>>>({});
 
   const resetForm = () => setForm({ employeeId: "", year: new Date().getFullYear(), leaveType: "SICK", totalDays: 0 });
 
@@ -58,7 +64,7 @@ export default function LeaveAllocationsPage() {
     { id: "actions", header: "", cell: ({ row }) => (
       <div className="flex items-center gap-1">
         <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm(row.original); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Delete this allocation?")) deleteMutation.mutate(row.original.id, { onSuccess: () => showToast("Allocation deleted"), onError: (err) => showToast(getApiErrorMessage(err, "Failed to delete"), "error") }); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
       </div>
     )},
   ];
@@ -72,13 +78,13 @@ export default function LeaveAllocationsPage() {
           <DialogContent className="sm:max-w-sm">
             <DialogHeader><DialogTitle>Add Leave Allocation</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><label className="text-sm font-medium">Employee</label><Select value={form.employeeId || ""} onValueChange={(v) => setForm({ ...form, employeeId: v } as LeaveAllocationForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.employeeCode} - {e.user ? `${e.user.firstName} ${e.user.lastName}` : e.id}</SelectItem>)}</SelectContent></Select></div>
+              <div><label className="text-sm font-medium">Employee</label><Select value={form.employeeId || ""} onValueChange={(v) => { setForm({ ...form, employeeId: v } as LeaveAllocationForm); clearFieldError("employeeId", setErrors); }}><SelectTrigger className={errors.employeeId ? "border-red-500" : ""}><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.employeeCode} - {e.user ? `${e.user.firstName} ${e.user.lastName}` : e.id}</SelectItem>)}</SelectContent></Select><FieldError error={errors.employeeId} /></div>
               <div><label className="text-sm font-medium">Year</label><Input type="number" value={form.year || new Date().getFullYear()} onChange={(e) => setForm({ ...form, year: Number(e.target.value) } as LeaveAllocationForm)} /></div>
-              <div><label className="text-sm font-medium">Leave Type</label><Select value={form.leaveType || "SICK"} onValueChange={(v) => setForm({ ...form, leaveType: v } as LeaveAllocationForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SICK">Sick</SelectItem><SelectItem value="CASUAL">Casual</SelectItem><SelectItem value="ANNUAL">Annual</SelectItem><SelectItem value="OTHER">Other</SelectItem></SelectContent></Select></div>
-              <div><label className="text-sm font-medium">Total Days</label><Input type="number" min={0} value={form.totalDays || 0} onChange={(e) => setForm({ ...form, totalDays: Number(e.target.value) } as LeaveAllocationForm)} /></div>
+              <div><label className="text-sm font-medium">Leave Type</label><Select value={form.leaveType || "SICK"} onValueChange={(v) => { setForm({ ...form, leaveType: v } as LeaveAllocationForm); clearFieldError("leaveType", setErrors); }}><SelectTrigger className={errors.leaveType ? "border-red-500" : ""}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SICK">Sick</SelectItem><SelectItem value="CASUAL">Casual</SelectItem><SelectItem value="ANNUAL">Annual</SelectItem><SelectItem value="OTHER">Other</SelectItem></SelectContent></Select><FieldError error={errors.leaveType} /></div>
+              <div><label className="text-sm font-medium">Total Days</label><Input type="number" min={0} value={form.totalDays || 0} onChange={(e) => { setForm({ ...form, totalDays: Number(e.target.value) } as LeaveAllocationForm); clearFieldError("totalDays", setErrors); }} className={errors.totalDays ? "border-red-500" : ""} /><FieldError error={errors.totalDays} /></div>
             </div>
             <DialogFooter showCloseButton>
-              <Button onClick={() => { if (!form.employeeId || !form.totalDays) { showToast("Please fill Employee ID and Total Days", "error"); return; } createMutation.mutate(form as CreateLeaveAllocationDto, { onSuccess: () => { showToast("Allocation created"); setCreateOpen(false); resetForm(); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create"), "error") }); }} disabled={createMutation.isPending}>Save</Button>
+              <Button onClick={() => { const rules: ValidationRules<CreateLeaveAllocationDto> = { employeeId: { required: "Employee is required" }, leaveType: { required: "Leave type is required" }, totalDays: { required: "Total days is required" } }; const errs = validateForm(form, rules); setErrors(errs); if (Object.keys(errs).length > 0) return; createMutation.mutate({ employeeId: form.employeeId!, year: form.year, leaveType: form.leaveType!, totalDays: form.totalDays! } as CreateLeaveAllocationDto, { onSuccess: () => { setErrors({}); showToast("Allocation created"); setCreateOpen(false); resetForm(); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create"), "error") }); }} disabled={createMutation.isPending}>Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -94,10 +100,26 @@ export default function LeaveAllocationsPage() {
             <div><label className="text-sm font-medium">Used Days</label><Input type="number" min={0} value={form.usedDays || 0} onChange={(e) => setForm({ ...form, usedDays: Number(e.target.value) } as LeaveAllocationForm)} /></div>
           </div>
           <DialogFooter showCloseButton>
-            <Button onClick={() => { if (editItem) { updateMutation.mutate({ id: editItem.id, dto: form as UpdateLeaveAllocationDto }, { onSuccess: () => { showToast("Allocation updated"); setEditItem(null); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update"), "error") }); } }} disabled={updateMutation.isPending}>Save</Button>
+            <Button onClick={() => { if (editItem) { const rules: ValidationRules<Partial<CreateLeaveAllocationDto>> = { totalDays: { required: "Total days is required" } }; const errs = validateForm(form, rules); setErrors(errs); if (Object.keys(errs).length > 0) return; updateMutation.mutate({ id: editItem.id, dto: { totalDays: form.totalDays! } }, { onSuccess: () => { setErrors({}); showToast("Allocation updated"); setEditItem(null); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update"), "error") }); } }} disabled={updateMutation.isPending}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}
+        title="Delete Allocation"
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmDelete) {
+            deleteMutation.mutate(confirmDelete, { onSuccess: () => showToast("Allocation deleted"), onError: (err) => showToast(getApiErrorMessage(err, "Failed to delete"), "error") });
+          }
+          setConfirmDelete(null);
+        }}
+        loading={deleteMutation.isPending}
+      >
+        Are you sure you want to delete this allocation?
+      </ConfirmDialog>
     </div>
   );
 }

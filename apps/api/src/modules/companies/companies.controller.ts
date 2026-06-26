@@ -10,9 +10,9 @@ export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN)
-  async findAll() {
-    return this.companiesService.findAll();
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  async findAll(@CurrentCompany('id') companyId: string) {
+    return this.companiesService.findAll(companyId);
   }
 
   @Get('current')

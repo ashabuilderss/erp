@@ -5,6 +5,24 @@
       "type": "local",
       "command": ["npx", "@playwright/mcp@latest", "--headless", "--browser", "chromium"],
       "enabled": true
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\Nikhil Dhiman\\Desktop\\dashboard"],
+      "enabled": true
+    },
+    "postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "@yawlabs/postgres-mcp", "postgresql://postgres:postgres@127.0.0.1:5433/realestate_crm"],
+      "enabled": true
+    },
+    "subagents": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-subagents-opencode"],
+      "enabled": true,
+      "environment": {
+        "OPENCODE_BIN": "C:\\Users\\Nikhil Dhiman\\AppData\\Local\\opencode\\opencode-cli.exe"
+      }
     }
   }
 }

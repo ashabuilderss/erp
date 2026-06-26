@@ -22,6 +22,8 @@ export async function resetDatabase(prisma: PrismaService): Promise<void> {
       "bookings",
       "site_visits",
       "customers",
+      "task_comments",
+      "attendance_corrections",
       "leads",
       "properties",
       "refresh_tokens",

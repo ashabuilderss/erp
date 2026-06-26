@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Moon, Sun, Bell, LogOut } from "lucide-react";
+import { Moon, Sun, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { NotificationDropdown } from "./notification-dropdown";
 import { ROLE_LABELS } from "@/lib/constants";
 import { signOut } from "next-auth/react";
 
@@ -21,9 +22,14 @@ interface TopNavProps {
     firstName: string;
     lastName: string;
     email: string;
-    role: "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
+    role: "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
   };
 }
+  async function handleSignOut() {
+    await signOut({ redirect: false });
+    window.location.assign("/sign-in");
+  }
+
 
 export function TopNav({ user }: TopNavProps) {
   const { theme, setTheme } = useTheme();
@@ -49,9 +55,7 @@ export function TopNav({ user }: TopNavProps) {
           )}
         </Button>
 
-        <Button variant="ghost" size="icon">
-          <Bell className="h-4 w-4" />
-        </Button>
+        <NotificationDropdown />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent">
@@ -70,7 +74,7 @@ export function TopNav({ user }: TopNavProps) {
                 <div className="text-xs text-muted-foreground">{user.email}</div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/sign-in" })}>
+              <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
               </DropdownMenuItem>

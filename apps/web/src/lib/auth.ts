@@ -1,7 +1,15 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
-const API_URL = process.env.API_URL || "http://localhost:4000";
+type UserFields = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  companyId: string;
+  employeeId: string | null;
+};
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -10,32 +18,57 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        accessToken: { label: "Access Token", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        const API_URL = process.env.API_URL || "http://localhost:4000";
+        let userFields: UserFields | null = null;
 
-        const res = await fetch(`${API_URL}/api/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: credentials.email,
-            password: credentials.password,
-          }),
-        });
+        if (credentials?.accessToken) {
+          const res = await fetch(`${API_URL}/api/auth/me`, {
+            headers: {
+              Authorization: `Bearer ${String(credentials.accessToken)}`,
+            },
+          });
+          if (!res.ok) return null;
 
-        if (!res.ok) return null;
+          const data = await res.json();
+          userFields = {
+            id: data.user.id,
+            email: data.user.email,
+            firstName: data.user.firstName,
+            lastName: data.user.lastName,
+            role: data.user.role,
+            companyId: data.company.id,
+            employeeId: data.employee?.id ?? null,
+          };
+        } else if (credentials?.email && credentials?.password) {
+          const res = await fetch(`${API_URL}/api/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          });
+          if (!res.ok) return null;
 
-        const data = await res.json();
-        const user = data.user;
+          const data = await res.json();
+          if (data.requiresTwoFactor || !data.user) return null;
+          userFields = data.user;
+        }
+
+        if (!userFields) return null;
+
         return {
-          id: user.id,
-          email: user.email,
-          name: `${user.firstName} ${user.lastName}`,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          companyId: user.companyId,
-          employeeId: user.employeeId,
+          id: userFields.id,
+          email: userFields.email,
+          name: `${userFields.firstName} ${userFields.lastName}`,
+          firstName: userFields.firstName,
+          lastName: userFields.lastName,
+          role: userFields.role,
+          companyId: userFields.companyId,
+          employeeId: userFields.employeeId ?? null,
         };
       },
     }),

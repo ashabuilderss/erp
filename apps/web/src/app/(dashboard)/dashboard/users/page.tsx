@@ -11,6 +11,7 @@ import { ROLE_LABELS } from "@/lib/constants";
 import type { User } from "@/lib/types";
 
 const roleColors: Record<string, string> = {
+  OWNER: "bg-red-100 text-red-800",
   ADMIN: "bg-purple-100 text-purple-800",
   HR_MANAGER: "bg-blue-100 text-blue-800",
   EMPLOYEE: "bg-green-100 text-green-800",
@@ -52,6 +53,7 @@ export default function UsersPage() {
           >
             <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="OWNER">Owner</SelectItem>
               <SelectItem value="ADMIN">Admin</SelectItem>
               <SelectItem value="HR_MANAGER">HR Manager</SelectItem>
               <SelectItem value="EMPLOYEE">Employee</SelectItem>

@@ -22,6 +22,22 @@ import {
   Shield,
   Coins,
   CheckSquare,
+  ClipboardCheck,
+  ShieldCheck,
+  Banknote,
+  Receipt,
+  ClipboardList,
+  AlertTriangle,
+  Smartphone,
+  PencilLine,
+  CircleDollarSign,
+  Truck,
+  Package,
+  Warehouse,
+  Handshake,
+  Store,
+  MessageSquare,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
@@ -47,10 +63,26 @@ const iconMap: Record<string, React.ElementType> = {
   Shield,
   Coins,
   CheckSquare,
+  ClipboardCheck,
+  ShieldCheck,
+  Banknote,
+  Receipt,
+  ClipboardList,
+  AlertTriangle,
+  Smartphone,
+  PencilLine,
+  CircleDollarSign,
+  Truck,
+  Package,
+  Warehouse,
+  Handshake,
+  Store,
+  MessageSquare,
+  Database,
 };
 
 interface SidebarProps {
-  role: "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
+  role: "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
 }
 
 export function Sidebar({ role }: SidebarProps) {

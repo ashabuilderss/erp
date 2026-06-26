@@ -15,11 +15,10 @@
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d",
+    "docker:dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
     "db:migrate": "npm run prisma:migrate --workspace=apps/api",
     "db:seed": "npm run prisma:seed --workspace=apps/api",
     "db:studio": "npm run prisma:studio --workspace=apps/api"
-  },
-  "dependencies": {
-    "react-error-boundary": "^6.1.2"
   }
 }

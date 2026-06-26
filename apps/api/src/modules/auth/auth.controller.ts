@@ -12,7 +12,7 @@ interface AuthenticatedRequest extends Request {
     email: string;
     firstName: string;
     lastName: string;
-    role: string;
+    role: UserRole;
     companyId: string;
     employeeId: string | null;
   };
@@ -29,8 +29,14 @@ export class AuthController {
 
   @Post('login')
   @Public()
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
+  async login(@Body() dto: LoginDto, @Req() req: Request) {
+    const headers = req.headers as unknown as Record<string, string | string[] | undefined>;
+    const forwarded = headers['x-forwarded-for'];
+    const realIp = headers['x-real-ip'];
+    const ipAddress = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim()
+      || (Array.isArray(realIp) ? realIp[0] : realIp)
+      || 'unknown';
+    return this.authService.login(dto.email, dto.password, ipAddress);
   }
 
   @Post('refresh')
@@ -61,6 +67,11 @@ export class AuthController {
   @Get('me')
   async getMe(@Req() req: AuthenticatedRequest) {
     const employee = await this.authService.getEmployeeByUserId(req.user.id);
+    const user = await this.authService.getFullUser(req.user.id);
+    const permissions = await this.authService.getEffectivePermissions(
+      req.user.id,
+      req.user.role,
+    );
     return {
       user: {
         id: req.user.id,
@@ -69,6 +80,7 @@ export class AuthController {
         lastName: req.user.lastName,
         role: req.user.role,
         isActive: true,
+        totpEnabled: user?.totpEnabled ?? false,
       },
       company: {
         id: req.company.id,
@@ -78,7 +90,7 @@ export class AuthController {
       employee: employee
         ? { id: employee.id, employeeCode: employee.employeeCode }
         : null,
-      permissions: [],
+      permissions,
     };
   }
 }

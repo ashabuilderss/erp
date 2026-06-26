@@ -16,17 +16,22 @@ export class CreateLeaveRequestDto {
   @IsDateString()
   startDate: string;
 
-  @ApiProperty({ example: '2024-02-05' })
+  @ApiProperty({ example: '2024-02-03' })
   @IsDateString()
   endDate: string;
 
-  @ApiProperty({ enum: LeaveType, default: LeaveType.OTHER })
+  @ApiProperty({ enum: LeaveType, default: LeaveType.MEDICAL })
   @IsEnum(LeaveType)
-  type: LeaveType = LeaveType.OTHER;
+  type: LeaveType = LeaveType.MEDICAL;
 
-  @ApiPropertyOptional({ example: 'Family vacation' })
+  @ApiPropertyOptional({ example: 'Medical emergency' })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   reason?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  documentUrl?: string;
 }

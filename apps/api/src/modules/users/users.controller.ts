@@ -23,7 +23,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.OWNER)
   async findAll(
     @Query() query: QueryUserDto,
     @CurrentCompany('id') companyId: string,

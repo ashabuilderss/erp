@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ColumnDef } from "@tanstack/react-table";
-import { Plus, Pencil, Trash2, ShieldCheck, LogIn, LogOut } from "lucide-react";
+import { Plus, Pencil, Trash2, ShieldCheck, LogIn, LogOut, MapPin, ClipboardList, Camera } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CardSkeleton, TableSkeleton } from "@/components/ui/skeleton-variants";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { useAttendance, useCreateAttendance, useUpdateAttendance, useDeleteAttendance, useVerifyAttendance, useMyAttendance, useCheckIn, useCheckOut } from "@/hooks/api";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { useAttendance, useCreateAttendance, useUpdateAttendance, useDeleteAttendance, useVerifyAttendance, useMyAttendance, useCheckIn, useCheckOut, useUpload, useEmployees } from "@/hooks/api";
 import { useCurrentUser } from "@/hooks/api";
 import { useToast } from "@/components/ui/toast";
 import type { Attendance, AttendanceStatus, CreateAttendanceDto, QueryAttendanceDto, UpdateAttendanceDto } from "@/lib/types";
@@ -23,15 +26,69 @@ const statusColors: Record<string, string> = {
 
 function EmployeeAttendanceView() {
   const { showToast } = useToast();
-  const { data: myAttendance, isLoading } = useMyAttendance();
+  const { data: myAttendanceRes, isLoading } = useMyAttendance();
+  const myAttendance = myAttendanceRes?.records;
+  const todayStr = myAttendanceRes?.today ?? new Date().toISOString().slice(0, 10);
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
+  const { uploadGeneral, uploading: uploadLoading } = useUpload();
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [selfieUrl, setSelfieUrl] = useState<string>("");
 
   const todayRecord = myAttendance?.find((a) => {
-    const today = new Date().toISOString().slice(0, 10);
-    return a.date?.slice(0, 10) === today;
+    const d = a.date ? (typeof a.date === 'string' ? a.date.slice(0, 10) : '') : '';
+    return d === todayStr;
   });
   const isCheckedIn = todayRecord?.checkIn && !todayRecord?.checkOut;
+
+  const getPosition = useCallback((): Promise<{ latitude: number; longitude: number } | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) { resolve(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        () => resolve(null),
+        { timeout: 5000, enableHighAccuracy: true },
+      );
+    });
+  }, []);
+
+  const handleSelfieUpload = useCallback(async (file: File) => {
+    try {
+      const result = await uploadGeneral(file);
+      setSelfieUrl(result.url);
+      showToast("Selfie uploaded");
+    } catch {
+      showToast("Selfie upload failed", "error");
+    }
+  }, [uploadGeneral, showToast]);
+
+  const handleCheckIn = useCallback(async () => {
+    setGpsLoading(true);
+    const coords = await getPosition();
+    checkIn.mutate({
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+      checkInPhoto: selfieUrl || undefined,
+    }, {
+      onSuccess: () => { showToast("Checked in successfully"); setSelfieUrl(""); },
+      onError: (err: Error) => showToast(err.message || "Check-in failed", "error"),
+      onSettled: () => setGpsLoading(false),
+    });
+  }, [checkIn, getPosition, showToast, selfieUrl]);
+
+  const handleCheckOut = useCallback(async () => {
+    setGpsLoading(true);
+    const coords = await getPosition();
+    checkOut.mutate({
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+      checkOutPhoto: selfieUrl || undefined,
+    }, {
+      onSuccess: () => { showToast("Checked out successfully"); setSelfieUrl(""); },
+      onError: (err: Error) => showToast(err.message || "Check-out failed", "error"),
+      onSettled: () => setGpsLoading(false),
+    });
+  }, [checkOut, getPosition, showToast, selfieUrl]);
 
   return (
     <div className="space-y-6">
@@ -60,25 +117,45 @@ function EmployeeAttendanceView() {
                 ? <Badge variant="outline" className="bg-green-100 text-green-800">Verified</Badge>
                 : <Badge variant="outline" className="bg-gray-100 text-gray-800">Pending Verification</Badge>
             )}
+            {todayRecord?.latitude && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {Number(todayRecord.latitude).toFixed(4)}, {Number(todayRecord.longitude).toFixed(4)}
+              </p>
+            )}
           </div>
-          <div className="flex gap-2 mt-4">
+          <div className="flex flex-wrap items-center gap-2 mt-4">
             {!todayRecord?.checkIn && (
-              <Button onClick={() => checkIn.mutate(undefined, {
-                onSuccess: () => showToast("Checked in successfully"),
-                onError: (err: Error) => showToast(err.message || "Check-in failed", "error"),
-              })} disabled={checkIn.isPending}>
-                <LogIn className="h-4 w-4 mr-1" />
-                {checkIn.isPending ? "Checking in..." : "Check In"}
-              </Button>
+              <>
+                <div className="flex items-center gap-1">
+                  <Input key={`checkin-${selfieUrl}`} type="file" accept="image/*" capture="environment" className="w-40 text-xs" onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (f) await handleSelfieUpload(f);
+                  }} />
+                  {uploadLoading && <span className="text-xs text-muted-foreground">...</span>}
+                  {selfieUrl && <Camera className="h-4 w-4 text-green-600" />}
+                </div>
+                <Button onClick={handleCheckIn} disabled={checkIn.isPending || gpsLoading || uploadLoading}>
+                  <LogIn className="h-4 w-4 mr-1" />
+                  {gpsLoading ? "Getting location..." : checkIn.isPending ? "Checking in..." : "Check In"}
+                </Button>
+              </>
             )}
             {isCheckedIn && (
-              <Button variant="outline" onClick={() => checkOut.mutate(undefined, {
-                onSuccess: () => showToast("Checked out successfully"),
-                onError: (err: Error) => showToast(err.message || "Check-out failed", "error"),
-              })} disabled={checkOut.isPending}>
-                <LogOut className="h-4 w-4 mr-1" />
-                {checkOut.isPending ? "Checking out..." : "Check Out"}
-              </Button>
+              <>
+                <div className="flex items-center gap-1">
+                  <Input key={`checkout-${selfieUrl}`} type="file" accept="image/*" capture="environment" className="w-40 text-xs" onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (f) await handleSelfieUpload(f);
+                  }} />
+                  {uploadLoading && <span className="text-xs text-muted-foreground">...</span>}
+                  {selfieUrl && <Camera className="h-4 w-4 text-green-600" />}
+                </div>
+                <Button variant="outline" onClick={handleCheckOut} disabled={checkOut.isPending || gpsLoading || uploadLoading}>
+                  <LogOut className="h-4 w-4 mr-1" />
+                  {gpsLoading ? "Getting location..." : checkOut.isPending ? "Checking out..." : "Check Out"}
+                </Button>
+              </>
             )}
             {todayRecord?.checkIn && todayRecord?.checkOut && (
               <p className="text-sm text-green-600 font-medium">Completed</p>
@@ -91,7 +168,7 @@ function EmployeeAttendanceView() {
         <CardHeader><CardTitle>History</CardTitle></CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
+            <TableSkeleton rows={5} columns={4} />
           ) : myAttendance && myAttendance.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -118,7 +195,7 @@ function EmployeeAttendanceView() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">No attendance records yet</p>
+            <EmptyState icon={<ClipboardList className="h-12 w-12" />} title="No attendance records yet" description="Attendance records will appear here once marked" />
           )}
         </CardContent>
       </Card>
@@ -133,10 +210,15 @@ function AdminAttendanceView({ role }: { role: string | undefined }) {
   const updateMutation = useUpdateAttendance();
   const deleteMutation = useDeleteAttendance();
   const verifyMutation = useVerifyAttendance();
-  const canVerify = role === "ADMIN" || role === "HR_MANAGER";
+  const { showToast } = useToast();
+  const canVerify = role === "OWNER" || role === "ADMIN" || role === "HR_MANAGER";
   const [createOpen, setCreateOpen] = useState(false);
   const [editItem, setEditItem] = useState<Attendance | null>(null);
   const [form, setForm] = useState<Partial<CreateAttendanceDto & UpdateAttendanceDto>>({});
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const { data: empData } = useEmployees({ limit: 200 });
+  const employees = empData?.data || [];
 
   const resetForm = () => setForm({ employeeId: "", date: "", checkIn: "", checkOut: "", status: "PRESENT" });
 
@@ -150,19 +232,21 @@ function AdminAttendanceView({ role }: { role: string | undefined }) {
     { id: "actions", header: "", cell: ({ row }) => (
       <div className="flex items-center gap-1">
         {canVerify && !row.original.verified && (
-          <Button variant="ghost" size="icon-sm" onClick={() => verifyMutation.mutate(row.original.id)}><ShieldCheck className="h-4 w-4 text-green-600" /></Button>
+          <Button variant="ghost" size="icon-sm" onClick={() => verifyMutation.mutate(row.original.id, { onSuccess: () => showToast("Attendance verified"), onError: (err) => showToast(err?.message || "Failed to verify attendance", "error") })}><ShieldCheck className="h-4 w-4 text-green-600" /></Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={() => {
           setEditItem(row.original);
           setForm({
             employeeId: row.original.employeeId,
             date: row.original.date.slice(0, 10),
-            checkIn: row.original.checkIn ?? undefined,
-            checkOut: row.original.checkOut ?? undefined,
+              checkIn: row.original.checkIn ? format(new Date(row.original.checkIn), "HH:mm") : undefined,
+              checkOut: row.original.checkOut ? format(new Date(row.original.checkOut), "HH:mm") : undefined,
             status: row.original.status,
           });
         }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Delete this record?")) deleteMutation.mutate(row.original.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        {(role === "OWNER" || role === "ADMIN") && (
+          <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        )}
       </div>
     )},
   ];
@@ -171,28 +255,29 @@ function AdminAttendanceView({ role }: { role: string | undefined }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h2 className="text-2xl font-semibold">Attendance</h2><p className="text-sm text-muted-foreground">Track employee attendance</p></div>
-        <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) resetForm(); }}>
+        <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (o) resetForm(); }}>
           <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Record</DialogTrigger>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader><DialogTitle>Add Attendance Record</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><label className="text-sm font-medium">Employee ID</label><Input value={form.employeeId || ""} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Employee</label><Select value={form.employeeId || ""} onValueChange={(v) => setForm({ ...form, employeeId: v ?? "" })}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
               <div><label className="text-sm font-medium">Date</label><Input type="date" value={form.date || ""} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Check In</label><Input type="time" value={form.checkIn || ""} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Check Out</label><Input type="time" value={form.checkOut || ""} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Status</label><Select value={form.status || "PRESENT"} onValueChange={(v) => setForm({ ...form, status: (v ?? "PRESENT") as AttendanceStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PRESENT">Present</SelectItem><SelectItem value="ABSENT">Absent</SelectItem><SelectItem value="HALF_DAY">Half Day</SelectItem><SelectItem value="LEAVE">Leave</SelectItem></SelectContent></Select></div>
             </div>
             <DialogFooter showCloseButton><Button onClick={() => {
-              if (!form.employeeId || !form.date) return;
+              if (!form.employeeId || !form.date) { showToast("Employee ID and Date are required", "error"); return; }
               createMutation.mutate({
                 employeeId: form.employeeId,
-                date: new Date(form.date).toISOString(),
-                checkIn: form.checkIn,
-                checkOut: form.checkOut,
+                date: form.date,
+                checkIn: form.checkIn && form.date ? `${form.date}T${form.checkIn}:00.000Z` : undefined,
+                checkOut: form.checkOut && form.date ? `${form.date}T${form.checkOut}:00.000Z` : undefined,
                 status: form.status as AttendanceStatus | undefined,
+              }, {
+                onSuccess: () => { setCreateOpen(false); resetForm(); },
+                onError: (err) => showToast(err?.message || "Failed to create attendance", "error"),
               });
-              setCreateOpen(false);
-              resetForm();
             }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
@@ -208,16 +293,35 @@ function AdminAttendanceView({ role }: { role: string | undefined }) {
             <div><label className="text-sm font-medium">Check Out</label><Input type="time" value={form.checkOut || ""} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} /></div>
             <div><label className="text-sm font-medium">Status</label><Select value={form.status || "PRESENT"} onValueChange={(v) => setForm({ ...form, status: (v ?? "PRESENT") as AttendanceStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PRESENT">Present</SelectItem><SelectItem value="ABSENT">Absent</SelectItem><SelectItem value="HALF_DAY">Half Day</SelectItem><SelectItem value="LEAVE">Leave</SelectItem></SelectContent></Select></div>
           </div>
-          <DialogFooter showCloseButton><Button onClick={() => { if (editItem) { updateMutation.mutate({ id: editItem.id, dto: form }); setEditItem(null); } }} disabled={updateMutation.isPending}>Save</Button></DialogFooter>
+            <DialogFooter showCloseButton><Button onClick={() => { if (editItem) { updateMutation.mutate({ id: editItem.id, dto: { ...form, checkIn: form.checkIn && form.date ? `${form.date}T${form.checkIn}:00.000Z` : undefined, checkOut: form.checkOut && form.date ? `${form.date}T${form.checkOut}:00.000Z` : undefined } }, { onSuccess: () => { setEditItem(null); }, onError: (err) => showToast(err?.message || "Failed to update attendance", "error") }); } }} disabled={updateMutation.isPending}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}
+        title="Delete Attendance Record"
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmDelete) {
+            deleteMutation.mutate(confirmDelete, { onError: (err) => showToast(err?.message || "Failed to delete", "error"), onSettled: () => setConfirmDelete(null) });
+          } else {
+            setConfirmDelete(null);
+          }
+        }}
+        loading={deleteMutation.isPending}
+      >
+        Are you sure you want to delete this attendance record?
+      </ConfirmDialog>
     </div>
   );
 }
 
 export default function AttendancePage() {
-  const { data: currentUser } = useCurrentUser();
+  const { data: currentUser, isLoading } = useCurrentUser();
   const role = currentUser?.user?.role;
+
+  if (isLoading) return <CardSkeleton count={4} />;
 
   if (role === "EMPLOYEE") return <EmployeeAttendanceView />;
 

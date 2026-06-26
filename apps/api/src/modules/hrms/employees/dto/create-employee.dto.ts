@@ -7,7 +7,7 @@ import {
   IsNumber,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { EmployeeStatus } from '@prisma/client';
+import { EmployeeStatus, EmployeeStaffType } from '@prisma/client';
 
 export class CreateEmployeeDto {
   @ApiPropertyOptional({
@@ -56,6 +56,11 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsEnum(EmployeeStatus)
   status?: EmployeeStatus = EmployeeStatus.ACTIVE;
+
+  @ApiPropertyOptional({ enum: EmployeeStaffType, default: EmployeeStaffType.OFFICE })
+  @IsOptional()
+  @IsEnum(EmployeeStaffType)
+  staffType?: EmployeeStaffType = EmployeeStaffType.OFFICE;
 
   @ApiPropertyOptional({ description: 'Send invitation email after creation' })
   @IsOptional()

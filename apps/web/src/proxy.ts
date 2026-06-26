@@ -2,7 +2,11 @@ import { auth } from "@/lib/auth";
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
-  const isPublic = pathname === "/" || pathname.startsWith("/sign-in") || pathname.startsWith("/api/auth");
+  const isPublic =
+    pathname === "/" ||
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/api/auth") ||
+    pathname === "/api/health";
 
   if (!isPublic && !req.auth) {
     const signInUrl = new URL("/sign-in", req.url);

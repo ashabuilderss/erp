@@ -26,5 +26,33 @@ export function useUpload() {
     }
   };
 
-  return { uploadPropertyImages, uploading };
+  const uploadGeneral = async (file: File): Promise<UploadResponse> => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/proxy/uploads/general", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      return (await res.json()) as UploadResponse;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deleteUpload = async (key: string): Promise<void> => {
+    setUploading(true);
+    try {
+      const res = await fetch(`/api/proxy/uploads/${encodeURIComponent(key)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Delete failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return { uploadPropertyImages, uploadGeneral, deleteUpload, uploading };
 }

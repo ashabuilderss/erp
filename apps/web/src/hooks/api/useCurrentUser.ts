@@ -9,7 +9,7 @@ export interface CurrentUserData {
     email: string;
     firstName: string;
     lastName: string;
-    role: "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
+    role: "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
     isActive: boolean;
   };
   company: {

@@ -2,14 +2,16 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../config/prisma.service';
+import { TransitionService } from '../../../common/services/transition.service';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { UpdateLeaveRequestDto } from './dto/update-leave-request.dto';
 import { ApproveLeaveRequestDto } from './dto/approve-leave-request.dto';
 import { QueryLeaveRequestDto } from './dto/query-leave-request.dto';
-import { Prisma, LeaveStatus } from '@prisma/client';
+import { Prisma, LeaveStatus, UserRole } from '@prisma/client';
 import { safeSortBy } from '../../../common/utils/sort-by';
 import { NotificationEvents } from '../../notifications/events/notification-events';
 
@@ -27,6 +29,7 @@ export class LeaveRequestsService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private transitionService: TransitionService,
   ) {}
 
   async createMyLeaveRequest(
@@ -50,6 +53,10 @@ export class LeaveRequestsService {
       throw new BadRequestException(
         `Employee with ID ${resolvedEmployeeId} not found`,
       );
+    if (employee.companyId !== companyId)
+      throw new BadRequestException(
+        `Employee with ID ${resolvedEmployeeId} does not belong to this company`,
+      );
 
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
@@ -58,13 +65,40 @@ export class LeaveRequestsService {
         'Start date must be before or equal to end date',
       );
 
+    const daysRequested =
+      Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (daysRequested > 3) {
+      throw new BadRequestException(
+        'Leave cannot exceed 3 consecutive days',
+      );
+    }
+
+    const year = start.getFullYear();
+    const allocation = await this.prisma.leaveAllocation.findUnique({
+      where: {
+        employeeId_companyId_year_leaveType: {
+          employeeId: resolvedEmployeeId,
+          companyId,
+          year,
+          leaveType: dto.type,
+        },
+      },
+    });
+    if (allocation && allocation.usedDays + daysRequested > allocation.totalDays) {
+      throw new BadRequestException(
+        'Insufficient leave balance',
+      );
+    }
+
     const leave = await this.prisma.leaveRequest.create({
       data: {
-        ...dto,
+        employeeId: resolvedEmployeeId,
         companyId,
         startDate: start,
         endDate: end,
-        employeeId: resolvedEmployeeId,
+        type: dto.type,
+        reason: dto.reason,
+        documentUrl: dto.documentUrl,
       },
       include: { employee: { include: { user: true } } },
     });
@@ -75,7 +109,7 @@ export class LeaveRequestsService {
         userId: employeeUser.id,
         companyId,
         title: 'Leave Request Submitted',
-        message: `Your ${leave.type.toLowerCase()} leave (${dto.startDate} - ${dto.endDate}) has been submitted`,
+        message: `Your ${dto.type.toLowerCase()} leave (${dto.startDate} - ${dto.endDate}) has been submitted`,
         type: 'LEAVE_REQUESTED',
         link: `/leave-requests/${leave.id}`,
       });
@@ -203,12 +237,15 @@ export class LeaveRequestsService {
     dto: ApproveLeaveRequestDto,
     userId: string,
     companyId: string,
+    userRole: string,
   ) {
     const leave = await this.findOne(id, companyId);
 
-    if (leave.status !== LeaveStatus.PENDING) {
-      throw new BadRequestException(
-        `Leave request is already ${leave.status.toLowerCase()}`,
+    this.transitionService.validate('LeaveRequest', leave.status, dto.status);
+
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.ADMIN && userRole !== UserRole.HR_MANAGER) {
+      throw new ForbiddenException(
+        'You do not have permission to approve leave requests',
       );
     }
 
@@ -216,17 +253,52 @@ export class LeaveRequestsService {
       where: { userId },
     });
 
-    const updated = await this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        approvedById: employee?.id ?? null,
-        approvedAt: new Date(),
-      },
-      include: {
-        employee: { include: { user: true } },
-        approvedBy: { include: { user: true } },
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.leaveRequest.update({
+        where: { id },
+        data: {
+          status: dto.status,
+          approvedById: employee?.id ?? null,
+          approvedAt: new Date(),
+        },
+        include: {
+          employee: { include: { user: true } },
+          approvedBy: { include: { user: true } },
+        },
+      });
+
+      if (dto.status === LeaveStatus.APPROVED) {
+        const start = new Date(leave.startDate);
+        const end = new Date(leave.endDate);
+        const days =
+          Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
+          1;
+        const year = start.getFullYear();
+
+        await tx.leaveAllocation.upsert({
+          where: {
+            employeeId_companyId_year_leaveType: {
+              employeeId: leave.employeeId,
+              companyId,
+              year,
+              leaveType: leave.type,
+            },
+          },
+          create: {
+            employeeId: leave.employeeId,
+            companyId,
+            year,
+            leaveType: leave.type,
+            totalDays: 3,
+            usedDays: days,
+          },
+          update: {
+            usedDays: { increment: days },
+          },
+        });
+      }
+
+      return result;
     });
 
     const employeeUser = updated.employee?.user;
@@ -239,7 +311,7 @@ export class LeaveRequestsService {
         userId: employeeUser.id,
         companyId,
         title: isApproved ? 'Leave Approved' : 'Leave Rejected',
-        message: `Your ${updated.type.toLowerCase()} leave request has been ${isApproved ? 'approved' : 'rejected'}`,
+        message: `Your ${leave.type.toLowerCase()} leave request has been ${isApproved ? 'approved' : 'rejected'}`,
         type: isApproved ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED',
         link: `/leave-requests/${id}`,
       });
@@ -253,9 +325,13 @@ export class LeaveRequestsService {
     return this.prisma.leaveRequest.delete({ where: { id } });
   }
 
-  async getPendingCount(companyId: string) {
+  async getPendingCount(companyId: string, employeeId?: string) {
     return this.prisma.leaveRequest.count({
-      where: { status: LeaveStatus.PENDING, companyId },
+      where: {
+        status: LeaveStatus.PENDING,
+        companyId,
+        ...(employeeId ? { employeeId } : {}),
+      },
     });
   }
 }

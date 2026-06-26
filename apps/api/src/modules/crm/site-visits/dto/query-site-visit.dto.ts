@@ -1,33 +1,18 @@
-import {
-  IsOptional,
-  IsString,
-  IsEnum,
-  IsInt,
-  Min,
-  Max,
-  IsDateString,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsEnum, IsDateString } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { SiteVisitStatus } from '@prisma/client';
+import { BaseQueryDto } from '../../../../common/dto/base-query.dto';
 
-export class QuerySiteVisitDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
+export class QuerySiteVisitDto extends BaseQueryDto {
+  @ApiPropertyOptional({ default: 'scheduledDate' })
   @IsOptional()
   @IsString()
-  search?: string;
+  sortBy?: string = 'scheduledDate';
 
+  @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'asc' })
+  @IsOptional()
+  @IsEnum(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc' = 'asc';
   @IsOptional()
   @IsString()
   propertyId?: string;
@@ -55,12 +40,4 @@ export class QuerySiteVisitDto {
   @IsOptional()
   @IsString()
   assignedToEmployeeId?: string;
-
-  @IsOptional()
-  @IsString()
-  sortBy?: string = 'scheduledDate';
-
-  @IsOptional()
-  @IsEnum(['asc', 'desc'])
-  sortOrder?: 'asc' | 'desc' = 'asc';
 }

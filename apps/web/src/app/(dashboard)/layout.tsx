@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { useSession } from "next-auth/react";
 import { useCurrentUser } from "@/hooks/api";
 import { useRouter } from "next/navigation";
+import { DashboardSkeleton } from "@/components/ui/skeleton-variants";
 
 export default function DashboardLayout({
   children,
@@ -22,11 +23,7 @@ export default function DashboardLayout({
   }, [status, router]);
 
   if (status === "loading" || status === "unauthenticated") {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const dbRole = currentUser?.user?.role || session?.user?.role || "EMPLOYEE"
@@ -35,19 +32,15 @@ export default function DashboardLayout({
   const email = currentUser?.user?.email || session?.user?.email || "";
 
   if (roleLoading && !currentUser && !isError) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
-    <AppShell role={dbRole as "ADMIN" | "HR_MANAGER" | "EMPLOYEE"} user={{
+    <AppShell role={dbRole as "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE"} user={{
       firstName: fName,
       lastName: lName,
       email,
-      role: dbRole as "ADMIN" | "HR_MANAGER" | "EMPLOYEE",
+      role: dbRole as "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE",
     }}>
       {children}
     </AppShell>

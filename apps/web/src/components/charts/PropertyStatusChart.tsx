@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface PropertyStatusChartProps {
@@ -20,7 +20,11 @@ export function PropertyStatusChart({ data }: PropertyStatusChartProps) {
               <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={80} />
               <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
               <Legend />
-              <Bar dataKey="value" fill="#8884d8" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

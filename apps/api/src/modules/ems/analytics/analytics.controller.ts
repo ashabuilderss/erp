@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, ForbiddenException } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import {
   CurrentCompany,
   CurrentEmployeeId,
+  CurrentUser,
 } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
@@ -22,8 +23,16 @@ export class AnalyticsController {
   async getEmployeeAnalytics(
     @Param('employeeId') employeeId: string,
     @CurrentCompany('id') companyId: string,
+    @CurrentEmployeeId() currentEmployeeId: string | null,
+    @CurrentUser('role') role: string,
   ) {
-    return this.analyticsService.getEmployeeAnalytics(employeeId, companyId);
+    if (role === UserRole.EMPLOYEE && employeeId !== currentEmployeeId) {
+      throw new ForbiddenException('Employees can only view their own analytics');
+    }
+    return this.analyticsService.getEmployeeAnalytics(
+      role === UserRole.EMPLOYEE ? currentEmployeeId! : employeeId,
+      companyId,
+    );
   }
 
   @Get('my')
@@ -48,5 +57,17 @@ export class AnalyticsController {
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
   async getConversionFunnel(@CurrentCompany('id') companyId: string) {
     return this.analyticsService.getConversionFunnel(companyId);
+  }
+
+  @Get('bookings-by-employee')
+  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  async getBookingsByEmployee(@CurrentCompany('id') companyId: string) {
+    return this.analyticsService.getBookingsByEmployee(companyId);
+  }
+
+  @Get('site-visits-by-employee')
+  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  async getSiteVisitsByEmployee(@CurrentCompany('id') companyId: string) {
+    return this.analyticsService.getSiteVisitsByEmployee(companyId);
   }
 }

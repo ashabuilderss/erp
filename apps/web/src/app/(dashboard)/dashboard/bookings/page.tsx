@@ -10,9 +10,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useProperties, useCustomers, useEmployees, useLeads } from "@/hooks/api";
+import { useToast } from "@/components/ui/toast";
+import { getApiErrorMessage } from "@/lib/api";
 import type { Booking, BookingStatus, CreateBookingDto, PaymentStatus, UpdateBookingDto } from "@/lib/types";
 import { format } from "date-fns";
+import { FieldError } from "@/components/shared/field-error";
+import { validateForm, clearFieldError } from "@/components/shared/form-validation";
+import type { ValidationRules } from "@/components/shared/form-validation";
 
 type BookingForm = Partial<Booking> & {
   bookingDate?: string;
@@ -41,7 +47,10 @@ export default function BookingsPage() {
   const createMutation = useCreateBooking();
   const updateMutation = useUpdateBooking();
   const deleteMutation = useDeleteBooking();
+  const { showToast } = useToast();
   const [form, setForm] = useState<BookingForm>({});
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+const [errors, setErrors] = useState<Partial<Record<"propertyId" | "customerId" | "bookingDate" | "assignedToEmployeeId" | "amount", string>>>({});
 
   const properties = propData?.data || [];
   const customers = custData?.data || [];
@@ -60,13 +69,13 @@ export default function BookingsPage() {
     { accessorKey: "property", header: "Property", cell: ({ row }) => <span className="font-medium">{row.original.property?.title || row.original.propertyId}</span> },
     { accessorKey: "customer", header: "Customer", cell: ({ row }) => <span>{row.original.customer?.name || row.original.customerId}</span> },
     { accessorKey: "bookingDate", header: "Date", cell: ({ row }) => <span>{format(new Date(row.original.bookingDate), "MMM dd, yyyy")}</span> },
-    { accessorKey: "amount", header: "Amount", cell: ({ row }) => <span>${Number(row.original.amount).toLocaleString()}</span> },
+    { accessorKey: "amount", header: "Amount", cell: ({ row }) => <span>₹{Number(row.original.amount).toLocaleString()}</span> },
     { accessorKey: "status", header: "Status", cell: ({ row }) => <Badge variant="outline" className={statusColors[row.original.status]}>{row.original.status}</Badge> },
     { accessorKey: "paymentStatus", header: "Payment", cell: ({ row }) => <Badge variant="outline" className={paymentColors[row.original.paymentStatus]}>{row.original.paymentStatus}</Badge> },
     { id: "actions", header: "", cell: ({ row }) => (
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ ...row.original, bookingDate: row.original.bookingDate.slice(0, 10), leadId: row.original.leadId ?? undefined, notes: row.original.notes ?? undefined } as BookingForm); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Delete this booking?")) deleteMutation.mutate(row.original.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ propertyId: row.original.propertyId, customerId: row.original.customerId, amount: row.original.amount, status: row.original.status, paymentStatus: row.original.paymentStatus, assignedToEmployeeId: row.original.assignedToEmployeeId, bookingDate: row.original.bookingDate.slice(0, 10), leadId: row.original.leadId ?? undefined, notes: row.original.notes ?? undefined } as BookingForm); }}><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
       </div>
     )},
   ];
@@ -80,17 +89,17 @@ export default function BookingsPage() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader><DialogTitle>Add Booking</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-sm font-medium">Property</label><Select value={form.propertyId || ""} onValueChange={(v) => setForm({ ...form, propertyId: v } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger><SelectContent>{properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent></Select></div>
-              <div><label className="text-sm font-medium">Customer</label><Select value={form.customerId || ""} onValueChange={(v) => setForm({ ...form, customerId: v } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+              <div><label className="text-sm font-medium">Property</label><Select value={form.propertyId || ""} onValueChange={(v) => { setForm({ ...form, propertyId: v } as BookingForm); clearFieldError("propertyId", setErrors); }}><SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger><SelectContent>{properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent></Select><FieldError error={errors.propertyId} /></div>
+              <div><label className="text-sm font-medium">Customer</label><Select value={form.customerId || ""} onValueChange={(v) => { setForm({ ...form, customerId: v } as BookingForm); clearFieldError("customerId", setErrors); }}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FieldError error={errors.customerId} /></div>
               <div><label className="text-sm font-medium">Lead (optional)</label><Select value={form.leadId || ""} onValueChange={(v) => setForm({ ...form, leadId: v || undefined } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select lead" /></SelectTrigger><SelectContent>{leads.map((l) => <SelectItem key={l.id} value={l.id}>{l.customerName}</SelectItem>)}</SelectContent></Select></div>
-              <div><label className="text-sm font-medium">Assigned To</label><Select value={form.assignedToEmployeeId || ""} onValueChange={(v) => setForm({ ...form, assignedToEmployeeId: v } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
-              <div><label className="text-sm font-medium">Booking Date</label><Input type="date" value={form.bookingDate || ""} onChange={(e) => setForm({ ...form, bookingDate: e.target.value } as BookingForm)} /></div>
-              <div><label className="text-sm font-medium">Amount</label><Input type="number" value={form.amount || 0} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) } as BookingForm)} /></div>
+              <div><label className="text-sm font-medium">Assigned To</label><Select value={form.assignedToEmployeeId || ""} onValueChange={(v) => { setForm({ ...form, assignedToEmployeeId: v } as BookingForm); clearFieldError("assignedToEmployeeId", setErrors); }}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select><FieldError error={errors.assignedToEmployeeId} /></div>
+              <div><label className="text-sm font-medium">Booking Date</label><Input type="date" value={form.bookingDate || ""} onChange={(e) => { setForm({ ...form, bookingDate: e.target.value } as BookingForm); clearFieldError("bookingDate", setErrors); }} className={errors.bookingDate ? "border-red-500" : ""} /><FieldError error={errors.bookingDate} /></div>
+              <div><label className="text-sm font-medium">Amount</label><Input type="number" value={form.amount || 0} onChange={(e) => { setForm({ ...form, amount: Number(e.target.value) } as BookingForm); clearFieldError("amount", setErrors); }} /><FieldError error={errors.amount} /></div>
               <div><label className="text-sm font-medium">Status</label><Select value={form.status || "PENDING"} onValueChange={(v) => setForm({ ...form, status: v } as BookingForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PENDING">Pending</SelectItem><SelectItem value="CONFIRMED">Confirmed</SelectItem><SelectItem value="CANCELLED">Cancelled</SelectItem></SelectContent></Select></div>
               <div><label className="text-sm font-medium">Payment</label><Select value={form.paymentStatus || "PENDING"} onValueChange={(v) => setForm({ ...form, paymentStatus: v } as BookingForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PENDING">Pending</SelectItem><SelectItem value="PARTIAL">Partial</SelectItem><SelectItem value="COMPLETED">Completed</SelectItem></SelectContent></Select></div>
               <div className="col-span-2"><label className="text-sm font-medium">Notes</label><Input value={form.notes || ""} onChange={(e) => setForm({ ...form, notes: e.target.value } as BookingForm)} /></div>
             </div>
-            <DialogFooter showCloseButton><Button onClick={() => { if (!form.propertyId || !form.customerId || !form.bookingDate || !form.assignedToEmployeeId || !form.amount) { alert("Please fill Property, Customer, Date, Assigned To, and Amount"); return; } createMutation.mutate({ ...form, bookingDate: new Date(form.bookingDate).toISOString() } as CreateBookingDto); setCreateOpen(false); resetForm(); }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
+            <DialogFooter showCloseButton><Button onClick={() => { const rules: ValidationRules<BookingForm> = { propertyId: { required: "Property is required" }, customerId: { required: "Customer is required" }, bookingDate: { required: "Booking date is required" }, assignedToEmployeeId: { required: "Assigned employee is required" }, amount: { required: "Amount is required" } }; const fieldErrors = validateForm(form, rules); setErrors(fieldErrors); if (Object.keys(fieldErrors).length > 0) return; createMutation.mutate({ propertyId: form.propertyId, customerId: form.customerId, leadId: form.leadId || undefined, assignedToEmployeeId: form.assignedToEmployeeId, bookingDate: new Date(form.bookingDate!).toISOString(), amount: form.amount, status: form.status || "PENDING", paymentStatus: form.paymentStatus || "PENDING", notes: form.notes || undefined } as CreateBookingDto, { onSuccess: () => { setCreateOpen(false); resetForm(); setErrors({}); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create booking"), "error") }); }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -115,19 +124,39 @@ export default function BookingsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Edit Booking</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-sm font-medium">Property</label><Select value={form.propertyId || ""} onValueChange={(v) => setForm({ ...form, propertyId: v } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger><SelectContent>{properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent></Select></div>
-            <div><label className="text-sm font-medium">Customer</label><Select value={form.customerId || ""} onValueChange={(v) => setForm({ ...form, customerId: v } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+            <div><label className="text-sm font-medium">Property</label><Select value={form.propertyId || ""} onValueChange={(v) => { setForm({ ...form, propertyId: v } as BookingForm); clearFieldError("propertyId", setErrors); }}><SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger><SelectContent>{properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent></Select><FieldError error={errors.propertyId} /></div>
+            <div><label className="text-sm font-medium">Customer</label><Select value={form.customerId || ""} onValueChange={(v) => { setForm({ ...form, customerId: v } as BookingForm); clearFieldError("customerId", setErrors); }}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FieldError error={errors.customerId} /></div>
             <div><label className="text-sm font-medium">Lead (optional)</label><Select value={form.leadId || ""} onValueChange={(v) => setForm({ ...form, leadId: v || undefined } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select lead" /></SelectTrigger><SelectContent>{leads.map((l) => <SelectItem key={l.id} value={l.id}>{l.customerName}</SelectItem>)}</SelectContent></Select></div>
-            <div><label className="text-sm font-medium">Assigned To</label><Select value={form.assignedToEmployeeId || ""} onValueChange={(v) => setForm({ ...form, assignedToEmployeeId: v } as BookingForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
-            <div><label className="text-sm font-medium">Booking Date</label><Input type="date" value={form.bookingDate || ""} onChange={(e) => setForm({ ...form, bookingDate: e.target.value } as BookingForm)} /></div>
-            <div><label className="text-sm font-medium">Amount</label><Input type="number" value={form.amount || 0} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) } as BookingForm)} /></div>
+            <div><label className="text-sm font-medium">Assigned To</label><Select value={form.assignedToEmployeeId || ""} onValueChange={(v) => { setForm({ ...form, assignedToEmployeeId: v } as BookingForm); clearFieldError("assignedToEmployeeId", setErrors); }}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select><FieldError error={errors.assignedToEmployeeId} /></div>
+            <div><label className="text-sm font-medium">Booking Date</label><Input type="date" value={form.bookingDate || ""} onChange={(e) => { setForm({ ...form, bookingDate: e.target.value } as BookingForm); clearFieldError("bookingDate", setErrors); }} className={errors.bookingDate ? "border-red-500" : ""} /><FieldError error={errors.bookingDate} /></div>
+            <div><label className="text-sm font-medium">Amount</label><Input type="number" value={form.amount || 0} onChange={(e) => { setForm({ ...form, amount: Number(e.target.value) } as BookingForm); clearFieldError("amount", setErrors); }} /><FieldError error={errors.amount} /></div>
             <div><label className="text-sm font-medium">Status</label><Select value={form.status || "PENDING"} onValueChange={(v) => setForm({ ...form, status: v } as BookingForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PENDING">Pending</SelectItem><SelectItem value="CONFIRMED">Confirmed</SelectItem><SelectItem value="CANCELLED">Cancelled</SelectItem></SelectContent></Select></div>
             <div><label className="text-sm font-medium">Payment</label><Select value={form.paymentStatus || "PENDING"} onValueChange={(v) => setForm({ ...form, paymentStatus: v } as BookingForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PENDING">Pending</SelectItem><SelectItem value="PARTIAL">Partial</SelectItem><SelectItem value="COMPLETED">Completed</SelectItem></SelectContent></Select></div>
             <div className="col-span-2"><label className="text-sm font-medium">Notes</label><Input value={form.notes || ""} onChange={(e) => setForm({ ...form, notes: e.target.value } as BookingForm)} /></div>
           </div>
-          <DialogFooter showCloseButton><Button onClick={() => { if (editItem && form.bookingDate) { updateMutation.mutate({ id: editItem.id, dto: { ...form, bookingDate: new Date(form.bookingDate).toISOString() } as UpdateBookingDto }); setEditItem(null); } }} disabled={updateMutation.isPending}>Save</Button></DialogFooter>
+          <DialogFooter showCloseButton><Button onClick={() => { if (editItem && form.bookingDate) { const rules: ValidationRules<BookingForm> = { bookingDate: { required: "Booking date is required" } }; const fieldErrors = validateForm(form, rules); setErrors(fieldErrors); if (Object.keys(fieldErrors).length > 0) return; updateMutation.mutate({ id: editItem.id, dto: { propertyId: form.propertyId || undefined, customerId: form.customerId || undefined, leadId: form.leadId || undefined, assignedToEmployeeId: form.assignedToEmployeeId || undefined, bookingDate: new Date(form.bookingDate!).toISOString(), amount: form.amount, status: form.status || undefined, paymentStatus: form.paymentStatus || undefined, notes: form.notes || undefined } as UpdateBookingDto }, { onSuccess: () => { setEditItem(null); setErrors({}); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update booking"), "error") }); } }} disabled={updateMutation.isPending}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}
+        title="Delete Booking"
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmDelete) {
+            deleteMutation.mutate(confirmDelete, {
+              onSuccess: () => { setConfirmDelete(null); showToast("Booking deleted"); },
+              onError: (err) => { setConfirmDelete(null); showToast(getApiErrorMessage(err, "Failed to delete booking"), "error"); },
+            });
+          } else {
+            setConfirmDelete(null);
+          }
+        }}
+        loading={deleteMutation.isPending}
+      >
+        Are you sure you want to delete this booking?
+      </ConfirmDialog>
     </div>
   );
 }

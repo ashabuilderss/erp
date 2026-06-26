@@ -56,6 +56,8 @@ export const Permissions = {
 
   DASHBOARD_VIEW: 'dashboard:view',
   REPORT_VIEW: 'report:view',
+  REPORT_EXPORT: 'report:export',
+  ANALYTICS_VIEW: 'analytics:view',
 } as const;
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions];
@@ -63,10 +65,13 @@ export type Permission = (typeof Permissions)[keyof typeof Permissions];
 import { UserRole } from '@prisma/client';
 
 const rolePermissions: Record<UserRole, Permission[]> = {
+  OWNER: Object.values(Permissions),
   ADMIN: Object.values(Permissions),
   HR_MANAGER: [
     Permissions.DASHBOARD_VIEW,
     Permissions.REPORT_VIEW,
+    Permissions.REPORT_EXPORT,
+    Permissions.ANALYTICS_VIEW,
     Permissions.EMPLOYEE_READ,
     Permissions.EMPLOYEE_CREATE,
     Permissions.EMPLOYEE_UPDATE,
@@ -84,6 +89,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
   ],
   EMPLOYEE: [
     Permissions.DASHBOARD_VIEW,
+    Permissions.ANALYTICS_VIEW,
     Permissions.PROPERTY_READ,
     Permissions.LEAD_READ,
     Permissions.LEAD_CREATE,
@@ -111,4 +117,22 @@ export function getPermissionsForRole(role: UserRole): Permission[] {
 
 export function hasPermission(role: UserRole, permission: Permission): boolean {
   return getPermissionsForRole(role).includes(permission);
+}
+
+export function mergePermissionsWithGrants(
+  rolePermissions: Permission[],
+  grants: { permission: string; granted: boolean }[],
+): Permission[] {
+  const grantMap = new Map(grants.map((g) => [g.permission, g.granted]));
+  const effective = new Set(rolePermissions);
+
+  for (const [perm, granted] of grantMap) {
+    if (granted) {
+      effective.add(perm as Permission);
+    } else {
+      effective.delete(perm as Permission);
+    }
+  }
+
+  return Array.from(effective);
 }

@@ -29,6 +29,11 @@ export class DesignationsService {
         `Department with ID ${dto.departmentId} not found`,
       );
     }
+    if (department.companyId !== companyId) {
+      throw new BadRequestException(
+        `Department with ID ${dto.departmentId} does not belong to this company`,
+      );
+    }
 
     const designation = await this.prisma.designation.create({
       data: { ...dto, companyId },
@@ -104,6 +109,11 @@ export class DesignationsService {
       if (!department) {
         throw new BadRequestException(
           `Department with ID ${dto.departmentId} not found`,
+        );
+      }
+      if (department.companyId !== companyId) {
+        throw new BadRequestException(
+          `Department with ID ${dto.departmentId} does not belong to this company`,
         );
       }
     }

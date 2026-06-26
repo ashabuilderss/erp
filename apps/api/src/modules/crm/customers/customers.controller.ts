@@ -13,6 +13,8 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { Permissions } from '../../../common/auth/permissions';
 import { UserRole } from '@prisma/client';
 import {
   CurrentUser,
@@ -25,6 +27,7 @@ export class CustomersController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.CUSTOMER_CREATE)
   async create(
     @Body() dto: CreateCustomerDto,
     @CurrentUser('id') userId: string,
@@ -35,6 +38,7 @@ export class CustomersController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.CUSTOMER_READ)
   async findAll(
     @Query() query: QueryCustomerDto,
     @CurrentCompany('id') companyId: string,
@@ -44,6 +48,7 @@ export class CustomersController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.CUSTOMER_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -53,6 +58,7 @@ export class CustomersController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.CUSTOMER_UPDATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateCustomerDto,
@@ -63,6 +69,7 @@ export class CustomersController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.CUSTOMER_DELETE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

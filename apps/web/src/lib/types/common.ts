@@ -1,4 +1,4 @@
-export type UserRole = "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
+export type UserRole = "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -17,11 +17,12 @@ export interface Company {
   name: string;
   slug: string;
   isActive?: boolean;
+  settings?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export type UpdateCompanyDto = Partial<Pick<Company, "name" | "slug" | "isActive">>;
+export type UpdateCompanyDto = Partial<Pick<Company, "name" | "slug" | "isActive">> & { settings?: Record<string, unknown> };
 
 export interface ActivityLog {
   id: string;

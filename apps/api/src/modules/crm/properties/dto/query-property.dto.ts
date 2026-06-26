@@ -1,25 +1,8 @@
-import { IsOptional, IsString, IsEnum, IsInt, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsEnum } from 'class-validator';
 import { PropertyType, PropertyStatus } from '@prisma/client';
+import { BaseQueryDto } from '../../../../common/dto/base-query.dto';
 
-export class QueryPropertyDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryPropertyDto extends BaseQueryDto {
   @IsOptional()
   @IsEnum(PropertyType)
   type?: PropertyType;
@@ -39,12 +22,4 @@ export class QueryPropertyDto {
   @IsOptional()
   @IsString()
   assignedToEmployeeId?: string;
-
-  @IsOptional()
-  @IsString()
-  sortBy?: string = 'createdAt';
-
-  @IsOptional()
-  @IsEnum(['asc', 'desc'])
-  sortOrder?: 'asc' | 'desc' = 'desc';
 }

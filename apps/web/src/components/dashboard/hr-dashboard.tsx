@@ -4,15 +4,13 @@ import { useMemo } from "react";
 import { CheckCircle, Clock, CalendarRange, Activity } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useTodayAttendance, usePendingLeaveCount, useAttendance, useLeaveRequests } from "@/hooks/api";
+import { useCurrentUser, useTodayAttendance, usePendingLeaveCount, useAttendance, useLeaveRequests } from "@/hooks/api";
 import { KPICard } from "./kpi-card";
+import { DashboardClock } from "./dashboard-clock";
+import { Last7DaysAttendance } from "./last7days-attendance";
+import { DashboardSkeleton } from "@/components/ui/skeleton-variants";
 import { EmptyState } from "@/components/shared/empty-state";
 import { format } from "date-fns";
-
-function KpiSkeleton() {
-  return <Card><CardContent className="p-4"><div className="animate-pulse space-y-2"><div className="h-4 w-24 rounded bg-muted" /><div className="h-8 w-16 rounded bg-muted" /></div></CardContent></Card>;
-}
 
 export function HRDashboard() {
   const recentAttQuery = useMemo(() => ({ limit: 5, sortBy: "date" as const, sortOrder: "desc" as const }), []);
@@ -21,6 +19,11 @@ export function HRDashboard() {
   const { data: pendingLeavesCount, isLoading: pendingLoading } = usePendingLeaveCount();
   const { data: attendanceData, isLoading: recentLoading } = useAttendance(recentAttQuery);
   const { data: leaveData, isLoading: leaveLoading } = useLeaveRequests(leaveQuery);
+
+  const { data: currentUser } = useCurrentUser();
+  const name = currentUser?.user?.firstName ?? "HR";
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const isLoading = attLoading || pendingLoading || recentLoading || leaveLoading;
 
@@ -31,20 +34,15 @@ export function HRDashboard() {
   const pendingList = leaveData?.data?.filter(l => l.status === "PENDING") ?? [];
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div><Skeleton className="h-8 w-40 mb-1" /><Skeleton className="h-4 w-56" /></div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} />)}</div>
-        <div className="grid gap-4 md:grid-cols-2">{Array.from({ length: 2 }).map((_, i) => <Card key={i}><CardContent className="pt-6"><Skeleton className="h-5 w-32 mb-4" />{Array.from({ length: 4 }).map((_, j) => <Skeleton key={j} className="h-12 w-full mb-2" />)}</CardContent></Card>)}</div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-foreground">HR Dashboard</h2>
+        <h2 className="text-2xl font-semibold text-foreground">{timeOfDay}, {name}</h2>
         <p className="text-sm text-muted-foreground">Workforce overview</p>
+        <div className="mt-2"><DashboardClock /></div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -74,6 +72,11 @@ export function HRDashboard() {
           </CardContent>
         </Card>
 
+      </div>
+
+      <Last7DaysAttendance />
+
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Pending Leave Requests</CardTitle></CardHeader>
           <CardContent>
