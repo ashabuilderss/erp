@@ -1099,12 +1099,9 @@ async function main() {
   }
 
   const admin = seedConfig.demoUsers.find((user) => user.role === UserRole.ADMIN);
-  const hr = seedConfig.demoUsers.find((user) => user.role === UserRole.HR_MANAGER);
-  const salesManager = seedConfig.demoUsers.find((user) => user.employeeCode === "SAL-001");
-  const salesAgent = seedConfig.demoUsers.find((user) => user.employeeCode === "SAL-002");
 
-  if (!admin || !hr || !salesManager || !salesAgent) {
-    throw new Error("Local demo users are incomplete");
+  if (!admin) {
+    throw new Error("Local demo users are incomplete — no admin found");
   }
 
   const adminEmployee = await createUserWithEmployee(
@@ -1129,31 +1126,11 @@ async function main() {
     );
   }
 
-  const hrEmployee = createdEmployees.find((employee) => employee.employeeCode === hr.employeeCode)!;
-  const salesManagerEmployee = createdEmployees.find((employee) => employee.employeeCode === salesManager.employeeCode)!;
-  const salesAgentEmployee = createdEmployees.find((employee) => employee.employeeCode === salesAgent.employeeCode)!;
-
-  const crm = await seedCrmDemo(company.id, salesManagerEmployee, salesAgentEmployee);
-
-  const opsEmployee = createdEmployees.find((employee) => employee.employeeCode === "OPS-001")!;
-  await seedOpsData(company.id, opsEmployee, crm);
-
-  await seedHrAndPerformanceDemo(company.id, createdEmployees, hrEmployee);
-  await seedVendorsAndConstruction(company.id);
-  await seedBrokersAndComplaints(company.id, crm);
-  await seedCommissionsAndIncentives(company.id, crm.booking.id, salesManagerEmployee, salesAgentEmployee);
-  await seedPayments(company.id, crm.booking.id, salesAgentEmployee);
-  await seedEodAndEscalation(company.id, salesAgentEmployee, salesManagerEmployee, crm.leads[1].id);
-  await seedDevices(company.id, salesAgentEmployee);
-  await seedPayrollDemo(company.id, createdEmployees.filter((e) => e.salary), hrEmployee.id);
-
-  console.log("Seed completed successfully");
+  console.log("Seed completed successfully (users only — no demo data)");
   console.log(`  - 1 company (${company.name})`);
-  console.log(`  - ${seedConfig.demoUsers.length} demo users/employees`);
+  console.log(`  - ${seedConfig.demoUsers.length} users/employees`);
   console.log(`  - ${departments.length} departments`);
-  console.log(`  - ${crm.properties.length} properties, ${crm.leads.length} leads, ${crm.customers.length} customers`);
-  console.log("  - Site visits, booking, attendance, leave, assignments, performance, vendors, construction, brokers, complaints, commissions, incentives, payments, EOD, escalation, and devices demo rows");
-  console.log("  - Demo credentials:");
+  console.log("  - User credentials:");
   for (const user of seedConfig.demoUsers) {
     console.log(`    ${user.email} / ${user.password} (${user.role})`);
   }

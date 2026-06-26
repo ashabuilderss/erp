@@ -95,6 +95,28 @@ const LOCAL_DEMO_USERS: DemoSeedUser[] = [
     designation: "Operations Executive",
     phone: "+91 98765 10005",
   },
+  {
+    email: "marketing@company.com",
+    password: "Marketing@123",
+    firstName: "Sneha",
+    lastName: "Patel",
+    role: UserRole.EMPLOYEE,
+    employeeCode: "MKT-001",
+    department: "Marketing",
+    designation: "Marketing Executive",
+    phone: "+91 98765 10006",
+  },
+  {
+    email: "accounts@company.com",
+    password: "Accounts@123",
+    firstName: "Rajesh",
+    lastName: "Gupta",
+    role: UserRole.EMPLOYEE,
+    employeeCode: "ACC-001",
+    department: "Operations",
+    designation: "Operations Manager",
+    phone: "+91 98765 10007",
+  },
 ];
 const PRODUCTION_TEMPLATE_VALUES = new Set([
   "Default Company",
