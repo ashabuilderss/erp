@@ -31,7 +31,7 @@ export function KPICard({ label, value, sub, trend, icon, color, sparkline }: KP
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.06] dark:bg-gradient-to-br",
+        "relative overflow-hidden rounded-xl border border-border bg-card dark:border-white/[0.06] dark:bg-gradient-to-br",
         "dark:from-white/[0.04] dark:to-white/[0.01] backdrop-blur-sm",
         "border-l-[3px]",
         scheme.border,
