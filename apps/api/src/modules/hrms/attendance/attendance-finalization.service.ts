@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BatchStatus } from '@prisma/client';
+import { BatchStatus, DayAggregateStatus } from '@prisma/client';
 import { PrismaService } from '../../../config/prisma.service';
 import { TransitionService } from '../../../common/services/transition.service';
 import { GovernanceEventPublisher } from '../../governance-events/governance-event.publisher';
@@ -147,7 +147,13 @@ export class AttendanceFinalizationService {
       const overridesMap = new Map(
         (input.correctionOverrides ?? []).map((o) => [o.dayAggregateId, o]),
       );
-      const finalized = aggregates.map((aggregate) => {
+      const eligibleAggregates = aggregates.filter(
+        (aggregate) =>
+          aggregate.status === DayAggregateStatus.VERIFIED ||
+          aggregate.status === DayAggregateStatus.COMPLETED ||
+          overridesMap.has(aggregate.id),
+      );
+      const finalized = eligibleAggregates.map((aggregate) => {
         const shift = aggregate.attendanceSessions[0]?.shiftAssignmentSnapshots;
         const employeeLeaves = leaves.filter(
           (leave) => leave.employeeId === aggregate.employeeId,

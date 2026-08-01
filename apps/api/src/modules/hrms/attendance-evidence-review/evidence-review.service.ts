@@ -174,8 +174,8 @@ export class EvidenceReviewService {
 
     const dayAggregateStatus =
       dto.status === EvidenceReviewStatus.APPROVED
-        ? DayAggregateStatus.COMPLETED
-        : DayAggregateStatus.UNDER_REVIEW;
+        ? DayAggregateStatus.VERIFIED
+        : DayAggregateStatus.FLAGGED;
 
     await this.prisma.$transaction(async (tx) => {
       if (review.punchId) {

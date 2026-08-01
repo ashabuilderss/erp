@@ -2794,6 +2794,8 @@ enum CustomerType {
 enum DayAggregateStatus {
   COMPLETED
   UNDER_REVIEW
+  VERIFIED
+  FLAGGED
 }
 
 enum EmployeeStaffType {

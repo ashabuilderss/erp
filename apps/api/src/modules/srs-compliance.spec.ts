@@ -210,6 +210,8 @@ describe('Phase 4.2 Final Freeze Audit', () => {
     );
     expect(section).toContain('COMPLETED');
     expect(section).toContain('UNDER_REVIEW');
+    expect(section).toContain('VERIFIED');
+    expect(section).toContain('FLAGGED');
   });
 
   it('no ts-ignore in critical service files', async () => {

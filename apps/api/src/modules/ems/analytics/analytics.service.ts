@@ -167,7 +167,9 @@ export class AnalyticsService {
 
     const totalDays = attendance.length;
     const presentDays = attendance.filter(
-      (a) => a.status === DayAggregateStatus.COMPLETED,
+      (a) =>
+        a.status === DayAggregateStatus.COMPLETED ||
+        a.status === DayAggregateStatus.VERIFIED,
     ).length;
     const attendanceRate =
       totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
@@ -279,7 +281,10 @@ export class AnalyticsService {
     const [total, present] = await Promise.all([
       this.prisma.attendanceDayAggregate.count({ where: { companyId } }),
       this.prisma.attendanceDayAggregate.count({
-        where: { status: DayAggregateStatus.COMPLETED, companyId },
+        where: {
+          status: { in: [DayAggregateStatus.COMPLETED, DayAggregateStatus.VERIFIED] },
+          companyId,
+        },
       }),
     ]);
     return total > 0 ? Math.round((present / total) * 100) : 0;
@@ -411,7 +416,11 @@ export class AnalyticsService {
       const key = r.date.toISOString().slice(0, 10);
       const entry = dayMap.get(key);
       if (!entry) continue;
-      if (r.status === DayAggregateStatus.COMPLETED) entry.present++;
+      if (
+        r.status === DayAggregateStatus.COMPLETED ||
+        r.status === DayAggregateStatus.VERIFIED
+      )
+        entry.present++;
       else if (r.status === DayAggregateStatus.UNDER_REVIEW) entry.absent++;
     }
 
