@@ -27,6 +27,8 @@
 
 **Critical blocking finding:** the attendance nonce endpoint returns a bare hex string instead of JSON, breaking the Check In / Check Out flow entirely (see Phase 0 report). This alone blocks core delivery on the attendance page.
 
+> **Post-audit status (2026-08-01, Phase 2 fix session):** B1, B2, B3, B5 are **fixed, deployed, tested, live-verified, and committed** on `codex/production-docker-stabilization`. B4 has a **proposal** awaiting approval (`PROPOSAL_ACCOUNTS_DOUBLE_ENTRY.md`). B6 (secure-context on LAN IP) is a guidance/HTTPS item, not a code fix. See §"Compliance gate status" and `FIX_SUMMARY.md`.
+
 ---
 
 ## Phase 0 recap (root causes, reported)
@@ -123,12 +125,12 @@
 ## Compliance gate status
 
 ### Blocks-delivery (must fix before go-live)
-- [x] **B1 — Attendance nonce JSON bug** (check-in/out fully broken). Verified live.
-- [ ] **B2 — Payroll counts non-VERIFIED attendance** (§5.7). PENDING/FLAGGED/UNDER_REVIEW days leak into payroll snapshot.
-- [ ] **B3 — No two-tier task completion sign-off** (§7.10). Assignee ack only.
-- [ ] **B4 — Accounts: no double-entry / journal / ledger / trial balance** (§5.17). CRITICAL.
-- [ ] **B5 — Notification coverage incomplete** (§15.1/§5.30): several events not routed to users.
-- [ ] **B6 — Secure-context camera/GPS on LAN IP** (guidance/HTTPS only; blocks field app on phone via IP).
+- [x] **B1 — Attendance nonce JSON bug** (check-in/out fully broken). Verified live. Fixed + committed (`114a976`).
+- [x] **B2 — Payroll counts non-VERIFIED attendance** (§5.7). PENDING/FLAGGED/UNDER_REVIEW days leak into payroll snapshot. Fixed + committed (`7c1ebf5`).
+- [x] **B3 — No two-tier task completion sign-off** (§7.10). Assignee ack only. Fixed + committed (`8bb84c6`).
+- [ ] **B4 — Accounts: no double-entry / journal / ledger / trial balance** (§5.17). CRITICAL. **Proposal ready** (`PROPOSAL_ACCOUNTS_DOUBLE_ENTRY.md`, committed `571447a`) — awaiting approval before build.
+- [x] **B5 — Notification coverage incomplete** (§15.1/§5.30): several events not routed to users. Owner feed routing added + committed (`142b54b`).
+- [ ] **B6 — Secure-context camera/GPS on LAN IP** (guidance/HTTPS only; blocks field app on phone via IP). Guidance item — no code fix; use localhost or HTTPS.
 
 ### Non-blocking but noted
 - Review-row immutability not guaranteed (updatedAt + PATCH/DELETE imports).
