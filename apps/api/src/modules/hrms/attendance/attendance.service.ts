@@ -57,7 +57,10 @@ export class AttendanceService {
     this.realtimeGateway.broadcastToCompany(companyId, 'attendance', data);
   }
 
-  async generateNonce(employeeId: string, companyId: string): Promise<string> {
+  async generateNonce(
+    employeeId: string,
+    companyId: string,
+  ): Promise<{ nonce: string }> {
     const rateLimitKey = `attendance:nonce-ratelimit:${companyId}:${employeeId}`;
     const recentCount = await this.redis.get<string>(rateLimitKey);
     if (recentCount && parseInt(recentCount, 10) >= 5) {
@@ -74,7 +77,7 @@ export class AttendanceService {
     const currentCount = parseInt(recentCount ?? '0', 10) + 1;
     await this.redis.set(rateLimitKey, String(currentCount), 60);
 
-    return nonce;
+    return { nonce };
   }
 
   async getMyAttendance(employeeId: string, companyId: string) {

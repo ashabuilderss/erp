@@ -67,6 +67,16 @@ async function fetchApi<T>(
     return undefined as T;
   }
 
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new ApiError(
+      `Unexpected response from server (${contentType || "no content-type"}): ${text.slice(0, 200)}`,
+      response.status,
+      { rawBody: text.slice(0, 200) },
+    );
+  }
+
   return response.json();
 }
 

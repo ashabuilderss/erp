@@ -16,16 +16,16 @@ import {
 import { createHash } from 'crypto';
 
 const EXCLUDED_PATHS = [
-  '/api/auth/',
-  '/api/uploads/',
-  '/api/attendance/events',
-  '/api/attendance/nonce',
-  '/api/events/stream',
-  '/api/notifications/stream',
-  '/api/attendance/me/check-in',
-  '/api/attendance/me/check-out',
-  '/api/activity-logs/export',
-  '/api/health',
+  '/auth/',
+  '/uploads/',
+  '/attendance/events',
+  '/attendance/nonce',
+  '/events/stream',
+  '/notifications/stream',
+  '/attendance/me/check-in',
+  '/attendance/me/check-out',
+  '/activity-logs/export',
+  '/health',
 ];
 
 const RESOURCE_TTL: Record<string, number> = {
@@ -57,7 +57,14 @@ export class CacheInterceptor implements NestInterceptor {
     const method = request.method;
     const path: string = request.path || '';
 
-    if (EXCLUDED_PATHS.some((p) => path.startsWith(p))) return next.handle();
+    // Global prefix is 'api/v1'; strip it so exclusion matching is prefix-agnostic.
+    const normalizedPath = path.replace(/^\/api\/v1/, '');
+    const pathToMatch = normalizedPath.startsWith('/api/')
+      ? normalizedPath.replace(/^\/api/, '')
+      : normalizedPath;
+
+    if (EXCLUDED_PATHS.some((p) => pathToMatch.startsWith(p)))
+      return next.handle();
 
     const noCache = this.reflector.get<boolean>(
       NOCACHE_KEY,
@@ -177,8 +184,9 @@ export class CacheInterceptor implements NestInterceptor {
   }
 
   private getTTL(path: string): number {
-    const resource = this.inferResource(path);
-    if (path.replace(/^\/api\//, '').startsWith('reports/catalog')) return 300;
+    const normalized = path.replace(/^\/api\/v1/, '');
+    if (normalized.startsWith('reports/catalog')) return 300;
+    const resource = this.inferResource(normalized);
     return RESOURCE_TTL[resource] ?? 60;
   }
 }
