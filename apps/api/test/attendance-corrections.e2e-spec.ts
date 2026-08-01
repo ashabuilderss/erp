@@ -26,7 +26,7 @@ describe('Attendance corrections e2e', () => {
     const fixture = await createCompanyFixture(ctx.prisma, 'att-corr');
     const token = await login(app, fixture.user.email, fixture.password);
 
-    const today = new Date().toISOString().split('T')[0]!;
+    const today = new Date().toISOString().split('T')[0];
 
     const attendance = await request(app.getHttpServer())
       .post('/api/attendance')
@@ -36,7 +36,6 @@ describe('Attendance corrections e2e', () => {
         date: today,
         checkIn: `${today}T09:00:00.000Z`,
         checkOut: `${today}T17:00:00.000Z`,
-        status: 'PRESENT',
       })
       .expect(201);
 
@@ -54,36 +53,32 @@ describe('Attendance corrections e2e', () => {
       })
       .expect(201);
 
-    expect(correction.body.status).toBe('PENDING');
+    expect(correction.body.approvalRequestId).toBeDefined();
 
-    const list = await request(app.getHttpServer())
-      .get('/api/attendance-corrections')
-      .set(authHeader(token))
-      .expect(200);
+    const approvalBefore = await ctx.prisma.approvalRequest.findUnique({
+      where: { id: correction.body.approvalRequestId },
+    });
+    expect(approvalBefore!.status).toBe('PENDING');
 
-    const pending = list.body.data
-      ? list.body.data.find((c: { id: string }) => c.id === correction.body.id)
-      : list.body.find((c: { id: string }) => c.id === correction.body.id);
-
-    expect(pending).toBeDefined();
-    expect(pending!.status).toBe('PENDING');
-
-    const approved = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post(`/api/attendance-corrections/${correction.body.id}/approve`)
       .set(authHeader(token))
       .send({ notes: 'Approved by admin' })
       .expect(201);
 
-    expect(approved.body.status).toBe('APPROVED');
+    const approvalAfter = await ctx.prisma.approvalRequest.findUnique({
+      where: { id: correction.body.approvalRequestId },
+    });
+    expect(approvalAfter!.status).toBe('APPROVED');
     /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
   });
 
   it('creates and rejects attendance correction', async () => {
-    /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+    /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
     const fixture = await createCompanyFixture(ctx.prisma, 'att-corr');
     const token = await login(app, fixture.user.email, fixture.password);
 
-    const today = new Date().toISOString().split('T')[0]!;
+    const today = new Date().toISOString().split('T')[0];
 
     await request(app.getHttpServer())
       .post('/api/attendance')
@@ -93,7 +88,6 @@ describe('Attendance corrections e2e', () => {
         date: today,
         checkIn: `${today}T09:00:00.000Z`,
         checkOut: `${today}T17:00:00.000Z`,
-        status: 'PRESENT',
       })
       .expect(201);
 
@@ -108,22 +102,27 @@ describe('Attendance corrections e2e', () => {
       })
       .expect(201);
 
-    const rejected = await request(app.getHttpServer())
+    expect(correction.body.approvalRequestId).toBeDefined();
+
+    await request(app.getHttpServer())
       .post(`/api/attendance-corrections/${correction.body.id}/reject`)
       .set(authHeader(token))
       .send({ notes: 'No supporting evidence provided' })
       .expect(201);
 
-    expect(rejected.body.status).toBe('REJECTED');
-    /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+    const approvalAfter = await ctx.prisma.approvalRequest.findUnique({
+      where: { id: correction.body.approvalRequestId },
+    });
+    expect(approvalAfter!.status).toBe('REJECTED');
+    /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
   });
 
   it('rejects approval of non-pending correction', async () => {
-    /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+    /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
     const fixture = await createCompanyFixture(ctx.prisma, 'att-corr');
     const token = await login(app, fixture.user.email, fixture.password);
 
-    const today = new Date().toISOString().split('T')[0]!;
+    const today = new Date().toISOString().split('T')[0];
 
     await request(app.getHttpServer())
       .post('/api/attendance')
@@ -133,7 +132,6 @@ describe('Attendance corrections e2e', () => {
         date: today,
         checkIn: `${today}T09:00:00.000Z`,
         checkOut: `${today}T17:00:00.000Z`,
-        status: 'PRESENT',
       })
       .expect(201);
 
@@ -159,6 +157,6 @@ describe('Attendance corrections e2e', () => {
       .set(authHeader(token))
       .send({})
       .expect(400);
-    /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+    /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
   });
 });

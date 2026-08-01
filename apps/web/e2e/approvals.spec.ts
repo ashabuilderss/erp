@@ -51,25 +51,21 @@ test.describe.serial("Approvals Page — Owner Access", () => {
 });
 
 test.describe.serial("Approvals Page — HR Access", () => {
-  test("HR can access approvals page", async ({ page }) => {
+  test("HR is redirected away from approvals page", async ({ page }) => {
     await signInAsHR(page);
     await navigateTo(page, "/dashboard/approvals");
 
-    await expect(page.getByRole("heading", { name: "Approval Center" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Leave Requests" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Attendance Corrections" })).toBeVisible();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "Approval Center" })).not.toBeVisible();
   });
 });
 
 test.describe.serial("Approvals Page — Employee Access", () => {
-  test("Employee cannot see approval actions", async ({ page }) => {
+  test("Employee is redirected away from approvals page", async ({ page }) => {
     await signInAsEmployee(page);
     await navigateTo(page, "/dashboard/approvals");
 
-    await expect(page.getByRole("heading", { name: "Approval Center" })).toBeVisible();
-
-    const approveButtons = page.getByRole("button", { name: /approve/i });
-    const count = await approveButtons.count();
-    expect(count).toBe(0);
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "Approval Center" })).not.toBeVisible();
   });
 });

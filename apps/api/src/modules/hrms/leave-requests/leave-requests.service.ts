@@ -3,10 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../config/prisma.service';
 import { TransitionService } from '../../../common/services/transition.service';
+import { EmployeesService } from '../employees/employees.service';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { UpdateLeaveRequestDto } from './dto/update-leave-request.dto';
 import { ApproveLeaveRequestDto } from './dto/approve-leave-request.dto';
@@ -14,6 +16,8 @@ import { QueryLeaveRequestDto } from './dto/query-leave-request.dto';
 import { Prisma, LeaveStatus, UserRole } from '@prisma/client';
 import { safeSortBy } from '../../../common/utils/sort-by';
 import { NotificationEvents } from '../../notifications/events/notification-events';
+import { GovernanceEventPublisher } from '../../governance-events/governance-event.publisher';
+import { DomainEventTypes } from '../../governance-events/types/events';
 
 const ALLOWED_SORT = [
   'createdAt',
@@ -30,6 +34,8 @@ export class LeaveRequestsService {
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
     private transitionService: TransitionService,
+    private employeesService: EmployeesService,
+    @Optional() private eventPublisher?: GovernanceEventPublisher,
   ) {}
 
   async createMyLeaveRequest(
@@ -46,9 +52,7 @@ export class LeaveRequestsService {
     employeeIdOverride?: string,
   ) {
     const resolvedEmployeeId = employeeIdOverride ?? dto.employeeId;
-    const employee = await this.prisma.employee.findUnique({
-      where: { id: resolvedEmployeeId },
-    });
+    const employee = await this.employeesService.findBasicById(resolvedEmployeeId);
     if (!employee)
       throw new BadRequestException(
         `Employee with ID ${resolvedEmployeeId} not found`,
@@ -57,6 +61,12 @@ export class LeaveRequestsService {
       throw new BadRequestException(
         `Employee with ID ${resolvedEmployeeId} does not belong to this company`,
       );
+
+    if (dto.type !== 'MEDICAL') {
+      throw new BadRequestException(
+        'Only medical emergency leave is supported',
+      );
+    }
 
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
@@ -68,9 +78,17 @@ export class LeaveRequestsService {
     const daysRequested =
       Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     if (daysRequested > 3) {
+      throw new BadRequestException('Leave cannot exceed 3 consecutive days');
+    }
+
+    if (!dto.documentUrl) {
       throw new BadRequestException(
-        'Leave cannot exceed 3 consecutive days',
+        'Medical leave requires a supporting document upload',
       );
+    }
+
+    if (!dto.reason) {
+      throw new BadRequestException('Medical leave requires a reason');
     }
 
     const year = start.getFullYear();
@@ -84,10 +102,11 @@ export class LeaveRequestsService {
         },
       },
     });
-    if (allocation && allocation.usedDays + daysRequested > allocation.totalDays) {
-      throw new BadRequestException(
-        'Insufficient leave balance',
-      );
+    if (
+      allocation &&
+      allocation.usedDays + daysRequested > allocation.totalDays
+    ) {
+      throw new BadRequestException('Insufficient leave balance');
     }
 
     const leave = await this.prisma.leaveRequest.create({
@@ -100,10 +119,29 @@ export class LeaveRequestsService {
         reason: dto.reason,
         documentUrl: dto.documentUrl,
       },
-      include: { employee: { include: { user: true } } },
+      include: {
+        employeesLeaveRequestsEmployeeIdToemployees: {
+          include: { users: true },
+        },
+      },
+    });
+    await this.eventPublisher?.publish(this.prisma, {
+      eventType: DomainEventTypes.LEAVE_REQUESTED,
+      entityId: leave.id,
+      entityType: 'LeaveRequest',
+      companyId,
+      payload: {
+        companyId,
+        leaveRequestId: leave.id,
+        employeeId: resolvedEmployeeId,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        leaveType: dto.type,
+      },
     });
 
-    const employeeUser = leave.employee?.user;
+    const employeeUser =
+      leave.employeesLeaveRequestsEmployeeIdToemployees?.users;
     if (employeeUser) {
       this.eventEmitter.emit(NotificationEvents.LeaveRequested, {
         userId: employeeUser.id,
@@ -154,16 +192,18 @@ export class LeaveRequestsService {
       where.OR = [
         { reason: { contains: search, mode: 'insensitive' } },
         {
-          employee: { employeeCode: { contains: search, mode: 'insensitive' } },
-        },
-        {
-          employee: {
-            user: { firstName: { contains: search, mode: 'insensitive' } },
+          employeesLeaveRequestsEmployeeIdToemployees: {
+            employeeCode: { contains: search, mode: 'insensitive' },
           },
         },
         {
-          employee: {
-            user: { lastName: { contains: search, mode: 'insensitive' } },
+          employeesLeaveRequestsEmployeeIdToemployees: {
+            users: { firstName: { contains: search, mode: 'insensitive' } },
+          },
+        },
+        {
+          employeesLeaveRequestsEmployeeIdToemployees: {
+            users: { lastName: { contains: search, mode: 'insensitive' } },
           },
         },
       ];
@@ -176,8 +216,12 @@ export class LeaveRequestsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          employee: { include: { user: true, department: true } },
-          approvedBy: { include: { user: true } },
+          employeesLeaveRequestsEmployeeIdToemployees: {
+            include: { users: true, departments: true },
+          },
+          employeesLeaveRequestsApprovedByIdToemployees: {
+            include: { users: true },
+          },
         },
       }),
       this.prisma.leaveRequest.count({ where }),
@@ -196,8 +240,12 @@ export class LeaveRequestsService {
     const leave = await this.prisma.leaveRequest.findFirst({
       where,
       include: {
-        employee: { include: { user: true, department: true } },
-        approvedBy: { include: { user: true } },
+        employeesLeaveRequestsEmployeeIdToemployees: {
+          include: { users: true, departments: true },
+        },
+        employeesLeaveRequestsApprovedByIdToemployees: {
+          include: { users: true },
+        },
       },
     });
     if (!leave)
@@ -228,7 +276,11 @@ export class LeaveRequestsService {
     return this.prisma.leaveRequest.update({
       where: { id },
       data,
-      include: { employee: { include: { user: true } } },
+      include: {
+        employeesLeaveRequestsEmployeeIdToemployees: {
+          include: { users: true },
+        },
+      },
     });
   }
 
@@ -243,15 +295,28 @@ export class LeaveRequestsService {
 
     this.transitionService.validate('LeaveRequest', leave.status, dto.status);
 
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.ADMIN && userRole !== UserRole.HR_MANAGER) {
+    if (
+      userRole !== UserRole.OWNER &&
+      userRole !== UserRole.ADMIN &&
+      userRole !== UserRole.HR_MANAGER
+    ) {
       throw new ForbiddenException(
         'You do not have permission to approve leave requests',
       );
     }
 
-    const employee = await this.prisma.employee.findUnique({
-      where: { userId },
-    });
+    if (userRole !== UserRole.OWNER) {
+      throw new ForbiddenException(
+        'Medical leave can only be approved by the Owner',
+      );
+    }
+
+    const employee = await this.employeesService.findByUserId(userId);
+
+    // Prevent self-approval
+    if (leave.employeeId === employee?.id) {
+      throw new ForbiddenException('Cannot approve your own leave request');
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.leaveRequest.update({
@@ -262,8 +327,12 @@ export class LeaveRequestsService {
           approvedAt: new Date(),
         },
         include: {
-          employee: { include: { user: true } },
-          approvedBy: { include: { user: true } },
+          employeesLeaveRequestsEmployeeIdToemployees: {
+            include: { users: true },
+          },
+          employeesLeaveRequestsApprovedByIdToemployees: {
+            include: { users: true },
+          },
         },
       });
 
@@ -271,8 +340,9 @@ export class LeaveRequestsService {
         const start = new Date(leave.startDate);
         const end = new Date(leave.endDate);
         const days =
-          Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
-          1;
+          Math.floor(
+            (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
+          ) + 1;
         const year = start.getFullYear();
 
         await tx.leaveAllocation.upsert({
@@ -298,10 +368,27 @@ export class LeaveRequestsService {
         });
       }
 
+      await this.eventPublisher?.publish(tx, {
+        eventType:
+          dto.status === LeaveStatus.APPROVED
+            ? DomainEventTypes.LEAVE_APPROVED
+            : DomainEventTypes.LEAVE_REJECTED,
+        entityId: id,
+        entityType: 'LeaveRequest',
+        companyId,
+        payload: {
+          companyId,
+          leaveRequestId: id,
+          employeeId: leave.employeeId,
+          status: dto.status,
+        },
+      });
+
       return result;
     });
 
-    const employeeUser = updated.employee?.user;
+    const employeeUser =
+      updated.employeesLeaveRequestsEmployeeIdToemployees?.users;
     if (employeeUser) {
       const isApproved = dto.status === LeaveStatus.APPROVED;
       const eventName = isApproved
@@ -322,7 +409,7 @@ export class LeaveRequestsService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    return this.prisma.leaveRequest.delete({ where: { id } });
+    return this.prisma.leaveRequest.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   async getPendingCount(companyId: string, employeeId?: string) {
@@ -331,6 +418,35 @@ export class LeaveRequestsService {
         status: LeaveStatus.PENDING,
         companyId,
         ...(employeeId ? { employeeId } : {}),
+      },
+    });
+  }
+
+  // ── Cross-module query methods ──────────────────────────────────
+  // These methods provide a clean service-layer API for other modules
+  // that need leave data, replacing direct Prisma.leaveRequest queries.
+
+  /** Approved leave for a specific employee on a specific date — used by AttendanceService during punch. */
+  async findApprovedLeaveForDate(employeeId: string, companyId: string, date: Date) {
+    return this.prisma.leaveRequest.findFirst({
+      where: {
+        employeeId,
+        companyId,
+        status: 'APPROVED',
+        startDate: { lte: date },
+        endDate: { gte: date },
+      },
+    });
+  }
+
+  /** Count of approved leaves for a company on a specific date — used by Attendance stats/dashboard. */
+  async countApprovedLeaves(companyId: string, date: Date) {
+    return this.prisma.leaveRequest.count({
+      where: {
+        companyId,
+        status: 'APPROVED',
+        startDate: { lte: date },
+        endDate: { gte: date },
       },
     });
   }

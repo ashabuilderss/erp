@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useSites, useInventory } from "@/hooks/api";
+import { useSites, useInventory, useCurrentUser } from "@/hooks/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Package } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton-variants";
@@ -14,6 +15,9 @@ export default function InventoryPage() {
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const { data: sites } = useSites();
   const { data: inventory, isLoading } = useInventory(selectedSiteId ? { siteId: selectedSiteId } : {});
+  const { data: currentUser } = useCurrentUser();
+  const role = currentUser?.user?.role;
+  const canManage = role && ["OWNER", "ADMIN", "HR_MANAGER", "ACCOUNTS", "MANAGER"].includes(role);
 
   return (
     <div className="space-y-6">
@@ -22,6 +26,12 @@ export default function InventoryPage() {
           <h2 className="text-2xl font-semibold">Inventory by Site</h2>
           <p className="text-sm text-muted-foreground">View material inventory filtered by construction site</p>
         </div>
+        {canManage && (
+        <div className="flex gap-2">
+          <Button variant="outline">Transfer Stock</Button>
+          <Button>Adjust Stock / Wastage</Button>
+        </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -62,8 +72,10 @@ export default function InventoryPage() {
                     <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Category</th>
                     <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Unit</th>
                     <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Qty on Hand</th>
+                    <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
                     <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Site</th>
                     <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Last Updated</th>
+                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -75,9 +87,19 @@ export default function InventoryPage() {
                       <td className="p-4 align-middle">
                         <Badge variant="outline" className="font-mono">{item.quantityOnHand}</Badge>
                       </td>
+                      <td className="p-4 align-middle">
+                        {item.quantityOnHand <= (item.lowStockThreshold || 10) ? (
+                          <Badge variant="destructive">LOW STOCK</Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-green-50 text-green-700">OK</Badge>
+                        )}
+                      </td>
                       <td className="p-4 align-middle">{item.site?.name ?? item.siteId}</td>
                       <td className="p-4 align-middle text-muted-foreground">
                         {format(new Date(item.lastUpdated), "MMM d, yyyy h:mm a")}
+                      </td>
+                      <td className="p-4 align-middle text-right">
+                        <Button variant="ghost" size="sm">History</Button>
                       </td>
                     </tr>
                   ))}

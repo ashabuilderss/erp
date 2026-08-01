@@ -149,6 +149,15 @@ export class CreateLabourEntryDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 }
 
+export class CreateConsumptionDto {
+  @ApiProperty() @IsString() siteId: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() phaseId?: string;
+  @ApiProperty() @IsString() materialId: string;
+  @ApiProperty() @IsNumber() @Min(0.01) quantity: number;
+  @ApiProperty() @IsDateString() consumedDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+}
+
 export class CreateProgressPhotoDto {
   @ApiProperty() @IsString() siteId: string;
   @ApiProperty() @IsString() photoUrl: string;

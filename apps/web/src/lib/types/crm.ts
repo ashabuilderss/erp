@@ -262,3 +262,74 @@ export interface CreateBookingDto {
 }
 
 export type UpdateBookingDto = Partial<CreateBookingDto>;
+
+export type QuotationStatus = "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
+
+export interface QuotationItem {
+  label: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+}
+
+export interface Quotation {
+  id: string;
+  companyId: string;
+  referenceNumber: string;
+  leadId: string | null;
+  propertyId: string | null;
+  customerId: string | null;
+  totalAmount: number;
+  breakdown: QuotationItem[];
+  status: QuotationStatus;
+  validUntil: string;
+  notes: string | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  lead?: Lead | null;
+  property?: Property | null;
+  customer?: Customer | null;
+  createdBy?: Employee | null;
+}
+
+export interface QuotationAccessLog {
+  id: string;
+  companyId: string;
+  quotationId: string;
+  userId: string;
+  action: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  user?: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+export interface QuotationQuery {
+  page?: number;
+  limit?: number;
+  status?: QuotationStatus;
+  leadId?: string;
+  propertyId?: string;
+}
+
+export interface CreateQuotationDto {
+  referenceNumber: string;
+  totalAmount: number;
+  breakdown: QuotationItem[];
+  validUntil: string;
+  leadId?: string;
+  propertyId?: string;
+  customerId?: string;
+  notes?: string;
+}
+
+export interface UpdateQuotationStatusDto {
+  status: QuotationStatus;
+}

@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsDateString, IsOptional, IsEnum, IsArray } from 'class-validator';
 import { EodReportStatus } from '@prisma/client';
 
 export class CreateEodReportDto {
@@ -15,6 +15,11 @@ export class CreateEodReportDto {
   @IsOptional()
   @IsString()
   tomorrowPlan?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  photoUrls?: string[];
 }
 
 export class UpdateEodReportDto {

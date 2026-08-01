@@ -18,8 +18,12 @@ export class EodReportsService {
       },
       orderBy: { reportDate: 'desc' },
       include: {
-        employee: { select: { employeeCode: true } },
-        reviewedBy: { select: { employeeCode: true } },
+        employeesEodReportsEmployeeIdToemployees: {
+          select: { employeeCode: true },
+        },
+        employeesEodReportsReviewedByIdToemployees: {
+          select: { employeeCode: true },
+        },
       },
     });
   }
@@ -39,8 +43,12 @@ export class EodReportsService {
     const report = await this.prisma.eodReport.findFirst({
       where: { id, companyId },
       include: {
-        employee: { select: { employeeCode: true } },
-        reviewedBy: { select: { employeeCode: true } },
+        employeesEodReportsEmployeeIdToemployees: {
+          select: { employeeCode: true },
+        },
+        employeesEodReportsReviewedByIdToemployees: {
+          select: { employeeCode: true },
+        },
       },
     });
     if (!report) throw new NotFoundException('EOD report not found');
@@ -56,6 +64,7 @@ export class EodReportsService {
         accomplishments: dto.accomplishments,
         challenges: dto.challenges,
         tomorrowPlan: dto.tomorrowPlan,
+        photoUrls: dto.photoUrls || [],
       },
     });
   }

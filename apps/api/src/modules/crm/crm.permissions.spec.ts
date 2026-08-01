@@ -13,7 +13,12 @@ describe('CRM permission metadata', () => {
     [SiteVisitsController.prototype.update, Permissions.SITE_VISIT_UPDATE],
     [BookingsController.prototype.create, Permissions.BOOKING_CREATE],
     [BookingsController.prototype.update, Permissions.BOOKING_UPDATE],
-  ])('declares the authoritative permission for each action', (handler, permission) => {
-    expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toContain(permission);
-  });
+  ])(
+    'declares the authoritative permission for each action',
+    (handler, permission) => {
+      expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toContain(
+        permission,
+      );
+    },
+  );
 });

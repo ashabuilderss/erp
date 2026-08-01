@@ -1,14 +1,12 @@
-import { IsOptional, IsInt, Min, IsString, IsEnum } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CorrectionStatus } from '@prisma/client';
+
 import { BaseQueryDto } from '../../../../common/dto/base-query.dto';
 
 export class QueryAttendanceCorrectionDto extends BaseQueryDto {
-  @ApiPropertyOptional({ enum: CorrectionStatus })
+  @ApiPropertyOptional({ enum: ['PENDING', 'APPROVED', 'REJECTED'] })
   @IsOptional()
-  @IsEnum(CorrectionStatus)
-  status?: CorrectionStatus;
+  status?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

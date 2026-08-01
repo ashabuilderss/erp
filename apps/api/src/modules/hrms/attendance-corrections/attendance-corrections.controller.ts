@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Body, Query } from '@nestjs/common';
 import { AttendanceCorrectionsService } from './attendance-corrections.service';
 import { CreateAttendanceCorrectionDto } from './dto/create-attendance-correction.dto';
 import { QueryAttendanceCorrectionDto } from './dto/query-attendance-correction.dto';
+import { ReviewAttendanceCorrectionDto } from './dto/review-attendance-correction.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Permissions } from '../../../common/auth/permissions';
@@ -11,13 +12,15 @@ import {
 } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 import { CacheInvalidateExtra } from '../../../common/decorators/cache.decorators';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
 
 @Controller('attendance-corrections')
 export class AttendanceCorrectionsController {
   constructor(private readonly service: AttendanceCorrectionsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
   @RequirePermissions(Permissions.ATTENDANCE_CREATE)
   async create(
     @Body() dto: CreateAttendanceCorrectionDto,
@@ -28,7 +31,7 @@ export class AttendanceCorrectionsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER, UserRole.TEAM_LEAD)
   @RequirePermissions(Permissions.ATTENDANCE_READ)
   async findAll(
     @Query() query: QueryAttendanceCorrectionDto,
@@ -38,14 +41,14 @@ export class AttendanceCorrectionsController {
   }
 
   @Get('me')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
   @RequirePermissions(Permissions.ATTENDANCE_READ)
   async findMyCorrections(@CurrentEmployeeId() employeeId: string | null) {
     return this.service.findMyCorrections(employeeId!);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER, UserRole.TEAM_LEAD)
   @RequirePermissions(Permissions.ATTENDANCE_READ)
   async findOne(
     @Param('id') id: string,
@@ -55,27 +58,27 @@ export class AttendanceCorrectionsController {
   }
 
   @Post(':id/approve')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER, UserRole.TEAM_LEAD)
   @RequirePermissions(Permissions.ATTENDANCE_VERIFY)
   @CacheInvalidateExtra(['attendance-corrections', 'attendance'])
   async approve(
     @Param('id') id: string,
-    @Body() body: { notes?: string },
+    @Body() dto: ReviewAttendanceCorrectionDto,
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentCompany('id') companyId: string,
   ) {
-    return this.service.approve(id, employeeId!, companyId, body.notes);
+    return this.service.approve(id, employeeId!, companyId, dto.notes);
   }
 
   @Post(':id/reject')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER, UserRole.TEAM_LEAD)
   @RequirePermissions(Permissions.ATTENDANCE_VERIFY)
   async reject(
     @Param('id') id: string,
-    @Body() body: { notes?: string },
+    @Body() dto: ReviewAttendanceCorrectionDto,
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentCompany('id') companyId: string,
   ) {
-    return this.service.reject(id, employeeId!, companyId, body.notes);
+    return this.service.reject(id, employeeId!, companyId, dto.notes);
   }
 }

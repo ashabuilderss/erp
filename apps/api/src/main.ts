@@ -8,6 +8,10 @@ import { join } from 'path';
 import { AppModule } from './app.module';
 import { LoggerService } from './common/logger/logger.service';
 import { HealthService } from './common/services/health.service';
+import { IdempotencyGuard } from './common/guards/idempotency.guard';
+import { IdempotencyService } from './common/services/idempotency.service';
+import { Reflector } from '@nestjs/core';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { Express, Request, Response, NextFunction } from 'express';
 import { verify } from 'jsonwebtoken';
 
@@ -42,7 +46,7 @@ async function bootstrap() {
   const logger = app.get(LoggerService);
   app.useLogger(logger);
 
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api/v1');
   app.use(
     helmet({
       crossOriginEmbedderPolicy: false,
@@ -102,23 +106,41 @@ async function bootstrap() {
     }),
   );
 
+  app.useGlobalFilters(new PrismaExceptionFilter());
+
+  const reflector = app.get(Reflector);
+  const idempotencyService = app.get(IdempotencyService);
+  app.useGlobalGuards(new IdempotencyGuard(reflector, idempotencyService));
+
   const port = process.env.PORT || 4000;
 
   const healthService = app.get(HealthService);
-  app.getHttpAdapter().get('/api/health', async (_req: any, res: any) => {
+  const healthHandler = async (_req: any, res: any) => {
     const result = await healthService.check();
     const statusCode = result.status === 'ok' ? 200 : 503;
     res.status(statusCode).json(result);
-  });
+  };
+  app.getHttpAdapter().get('/api/health', healthHandler);
+  app.getHttpAdapter().get('/api/v1/health', healthHandler);
 
   if (process.env.NODE_ENV === 'production') {
-    const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-    const fcmConfigured = !!(process.env.FCM_CREDENTIALS_PATH || process.env.FCM_SERVER_KEY);
-    if (!smtpConfigured) logger.warn('SMTP not configured — email notifications will be disabled');
-    if (!fcmConfigured) logger.warn('FCM not configured — push notifications will be disabled');
+    const smtpConfigured = !!(
+      process.env.SMTP_HOST &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS
+    );
+    const fcmConfigured = !!(
+      process.env.FCM_CREDENTIALS_PATH || process.env.FCM_SERVER_KEY
+    );
+    if (!smtpConfigured)
+      logger.warn('SMTP not configured — email notifications will be disabled');
+    if (!fcmConfigured)
+      logger.warn('FCM not configured — push notifications will be disabled');
   }
 
   await app.listen(port);
+  app.enableShutdownHooks();
   logger.log(`Backend running on http://localhost:${port}`);
+  // Restart triggered
 }
 void bootstrap();

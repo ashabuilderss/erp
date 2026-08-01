@@ -35,7 +35,11 @@ export class TransitionService {
     return rule;
   }
 
-  canTransition(entityType: string, currentStatus: string, newStatus: string): boolean {
+  canTransition(
+    entityType: string,
+    currentStatus: string,
+    newStatus: string,
+  ): boolean {
     const rule = this.getRule(entityType);
     const allowed = rule.transitions[currentStatus];
     if (!allowed) return false;
@@ -51,7 +55,17 @@ export class TransitionService {
   }
 
   async execute<T = any>(op: TransitionOperation<T>): Promise<T> {
-    const { entityType, id, newStatus, companyId, currentUserRole, currentEmployeeId, before, after, include } = op;
+    const {
+      entityType,
+      id,
+      newStatus,
+      companyId,
+      currentUserRole,
+      currentEmployeeId,
+      before,
+      after,
+      include,
+    } = op;
     const rule = this.getRule(entityType);
 
     const entity = await (this.prisma as any)[rule.prismaModel].findFirst({
@@ -64,7 +78,11 @@ export class TransitionService {
       );
     }
 
-    if (currentUserRole === 'EMPLOYEE' && rule.ownershipField && currentEmployeeId) {
+    if (
+      currentUserRole === 'EMPLOYEE' &&
+      rule.ownershipField &&
+      currentEmployeeId
+    ) {
       if (entity[rule.ownershipField] !== currentEmployeeId) {
         throw new BadRequestException(
           `Employees can only update status of their own ${rule.entityName.toLowerCase()}s`,

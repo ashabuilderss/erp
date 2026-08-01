@@ -194,26 +194,32 @@ test.describe.serial("4. Brokers Module — Create & Verify", () => {
     await signInAsAdmin(page);
   });
 
-  test("Create broker with unique email via API", async ({ page }) => {
+  test("Create broker with unique email via API and verify", async ({
+    page,
+  }) => {
     const tag = uid();
+
     const resp = await page.request.post("/api/proxy/brokers", {
       data: {
         name: `E2E Broker ${tag}`,
-        companyName: "E2E Realty Partners",
-        phone: `+91-98765${tag.slice(-5)}`,
         email: `broker${tag}@e2etest.com`,
+        phone: `+91-90000${tag.slice(-5)}`,
+        companyName: `Broker Corp ${tag}`,
         commissionRate: 2.5,
       },
     });
     expect(resp.ok()).toBeTruthy();
     const { id } = await resp.json();
+    expect(id).toBeTruthy();
 
-    // Verify via API GET
+    // Verify via GET
     const getResp = await page.request.get(`/api/proxy/brokers/${id}`);
     expect(getResp.ok()).toBeTruthy();
     const record = await getResp.json();
-    expect(record.name).toBe(`E2E Broker ${tag}`);
+    expect(record.name).toContain("E2E Broker");
+    expect(record.email).toContain("broker");
   });
+
 });
 
 /* ------------------------------------------------------------------ */

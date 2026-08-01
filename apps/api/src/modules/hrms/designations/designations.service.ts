@@ -37,7 +37,7 @@ export class DesignationsService {
 
     const designation = await this.prisma.designation.create({
       data: { ...dto, companyId },
-      include: { department: true },
+      include: { departments: true },
     });
     this.eventEmitter.emit('designation.created', {
       companyId,
@@ -75,7 +75,7 @@ export class DesignationsService {
         orderBy: { [safeSortBy(sortBy, ALLOWED_SORT, 'createdAt')]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
-        include: { department: true, _count: { select: { employees: true } } },
+        include: { departments: true, _count: { select: { employees: true } } },
       }),
       this.prisma.designation.count({ where }),
     ]);
@@ -89,7 +89,7 @@ export class DesignationsService {
   async findOne(id: string, companyId: string) {
     const designation = await this.prisma.designation.findFirst({
       where: { id, companyId },
-      include: { department: true, employees: { include: { user: true } } },
+      include: { departments: true, employees: { include: { users: true } } },
     });
 
     if (!designation) {
@@ -121,7 +121,7 @@ export class DesignationsService {
     const updated = await this.prisma.designation.update({
       where: { id },
       data: dto,
-      include: { department: true, _count: { select: { employees: true } } },
+      include: { departments: true, _count: { select: { employees: true } } },
     });
     this.eventEmitter.emit('designation.updated', { companyId, entityId: id });
     return updated;
@@ -129,7 +129,7 @@ export class DesignationsService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.designation.delete({ where: { id } });
+    await this.prisma.designation.update({ where: { id }, data: { deletedAt: new Date() } });
     this.eventEmitter.emit('designation.deleted', { companyId, entityId: id });
   }
 }

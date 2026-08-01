@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../config/prisma.service';
+import { TransitionService } from '../../../common/services/transition.service';
 import { CreateTaskCommentDto } from './dto/create-task-comment.dto';
 import { Prisma, UserRole } from '@prisma/client';
 
 @Injectable()
 export class TaskCommentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly transitionService: TransitionService,
+  ) {}
 
   async findByAssignment(
     assignmentId: string,
@@ -16,6 +20,7 @@ export class TaskCommentsService {
     const where: Prisma.TaskCommentWhereInput = {
       assignmentId,
       companyId,
+      deletedAt: null,
     };
 
     if (role !== UserRole.ADMIN) {
@@ -25,7 +30,7 @@ export class TaskCommentsService {
     return this.prisma.taskComment.findMany({
       where,
       include: {
-        author: { include: { user: true } },
+        employees: { include: { users: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -41,12 +46,17 @@ export class TaskCommentsService {
         isPrivate: dto.isPrivate ?? false,
       },
       include: {
-        author: { include: { user: true } },
+        employees: { include: { users: true } },
       },
     });
   }
 
-  async remove(id: string, companyId: string, employeeId: string, role: string) {
+  async remove(
+    id: string,
+    companyId: string,
+    employeeId: string,
+    role: string,
+  ) {
     const comment = await this.prisma.taskComment.findFirst({
       where: { id, companyId },
     });
@@ -59,6 +69,6 @@ export class TaskCommentsService {
       throw new NotFoundException(`Comment with ID ${id} not found`);
     }
 
-    return this.prisma.taskComment.delete({ where: { id } });
+    return this.prisma.taskComment.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }

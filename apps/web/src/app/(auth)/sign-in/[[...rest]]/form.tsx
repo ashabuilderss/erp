@@ -28,7 +28,7 @@ export function SignInForm() {
     setLoading(true);
 
     try {
-      const checkRes = await fetch(`${API_URL}/api/auth/login`, {
+      const checkRes = await fetch(`${API_URL}/api/v1/auth/precheck`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -73,7 +73,7 @@ export function SignInForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/2fa/authenticate`, {
+      const res = await fetch(`${API_URL}/api/v1/auth/2fa/authenticate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tempToken, code }),

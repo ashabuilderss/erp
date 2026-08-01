@@ -22,13 +22,15 @@ import {
 import { UserRole } from '@prisma/client';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Permissions } from '../../../common/auth/permissions';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
+import { getScopedEmployeeId } from '../../../common/utils/role-scope.util';
 
 @Controller('properties')
 export class PropertiesController {
   constructor(private readonly propertiesService: PropertiesService) {}
 
   @Get('me')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.PROPERTY_READ)
   async getMyProperties(
     @CurrentEmployeeId() employeeId: string | null,
@@ -38,7 +40,8 @@ export class PropertiesController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.PROPERTY_CREATE)
   async create(
     @Body() dto: CreatePropertyDto,
@@ -46,11 +49,16 @@ export class PropertiesController {
     @CurrentUser('role') role: string,
     @CurrentEmployeeId() employeeId: string | null,
   ) {
-    return this.propertiesService.create(dto, companyId, role, employeeId ?? undefined);
+    return this.propertiesService.create(
+      dto,
+      companyId,
+      role,
+      employeeId ?? undefined,
+    );
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.PROPERTY_READ)
   async findAll(
     @Query() query: QueryPropertyDto,
@@ -61,12 +69,12 @@ export class PropertiesController {
     return this.propertiesService.findAll(
       query,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
     );
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.PROPERTY_READ)
   async findOne(
     @Param('id') id: string,
@@ -74,11 +82,15 @@ export class PropertiesController {
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentUser('role') role: string,
   ) {
-    return this.propertiesService.findOne(id, companyId, role === 'EMPLOYEE' ? employeeId! : undefined);
+    return this.propertiesService.findOne(
+      id,
+      companyId,
+      getScopedEmployeeId(role, employeeId),
+    );
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.PROPERTY_UPDATE)
   async update(
     @Param('id') id: string,
@@ -91,14 +103,14 @@ export class PropertiesController {
       id,
       dto,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
       role,
       employeeId ?? undefined,
     );
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.PROPERTY_UPDATE)
   async updateStatus(
     @Param('id') id: string,
@@ -107,7 +119,14 @@ export class PropertiesController {
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentUser('role') role: string,
   ) {
-    return this.propertiesService.updateStatus(id, dto.status, companyId, role === 'EMPLOYEE' ? employeeId! : undefined, role, employeeId ?? undefined);
+    return this.propertiesService.updateStatus(
+      id,
+      dto.status,
+      companyId,
+      getScopedEmployeeId(role, employeeId),
+      role,
+      employeeId ?? undefined,
+    );
   }
 
   @Delete(':id')

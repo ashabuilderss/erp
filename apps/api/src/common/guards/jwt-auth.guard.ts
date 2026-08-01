@@ -41,6 +41,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       ? { id: company.id, name: company.name, slug: company.slug }
       : null;
 
+    // Convenience shortcuts on the request object
+    request.companyId = user.companyId as string;
+    request.employeeId = (employee?.id as string) ?? undefined;
+
     if (!request.company) {
       throw new UnauthorizedException('User not assigned to a company');
     }

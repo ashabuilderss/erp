@@ -11,6 +11,9 @@ import { UpdateBookingDto } from './dto/update-booking.dto';
 import { QueryBookingDto } from './dto/query-booking.dto';
 import { BookingStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { safeSortBy } from '../../../common/utils/sort-by';
+import { GovernanceEventPublisher } from '../../governance-events/governance-event.publisher';
+import { DomainEventTypes } from '../../governance-events/types/events';
+import { isOwnDataScope } from '../../../common/utils/role-scope.util';
 
 const ALLOWED_SORT = [
   'createdAt',
@@ -27,9 +30,15 @@ export class BookingsService {
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
     private transitionService: TransitionService,
+    private governanceEventPublisher: GovernanceEventPublisher,
   ) {}
 
-  async create(dto: CreateBookingDto, companyId: string, currentUserRole?: string, currentEmployeeId?: string) {
+  async create(
+    dto: CreateBookingDto,
+    companyId: string,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
     const property = await this.prisma.property.findFirst({
       where: { id: dto.propertyId, companyId },
     });
@@ -44,7 +53,9 @@ export class BookingsService {
       where: { id: dto.customerId, companyId },
     });
     if (!customer) {
-      throw new NotFoundException(`Customer with ID ${dto.customerId} not found`);
+      throw new NotFoundException(
+        `Customer with ID ${dto.customerId} not found`,
+      );
     }
 
     const assignedEmployee = await this.prisma.employee.findFirst({
@@ -66,8 +77,13 @@ export class BookingsService {
       }
     }
 
-    if (currentUserRole === 'EMPLOYEE' && dto.assignedToEmployeeId !== currentEmployeeId) {
-      throw new BadRequestException('Employees can only create bookings assigned to themselves');
+    if (
+      isOwnDataScope(currentUserRole!) &&
+      dto.assignedToEmployeeId !== currentEmployeeId
+    ) {
+      throw new BadRequestException(
+        'Employees can only create bookings assigned to themselves',
+      );
     }
 
     const booking = await this.prisma.$transaction(async (tx) => {
@@ -81,6 +97,15 @@ export class BookingsService {
         );
       }
 
+      // Validate Property FSM transition before proceeding
+      if (currentProperty?.status) {
+        this.transitionService.validate(
+          'Property',
+          currentProperty.status,
+          dto.status === 'CONFIRMED' ? 'BOOKED' : 'RESERVED',
+        );
+      }
+
       const activeBooking = await tx.booking.findFirst({
         where: {
           propertyId: dto.propertyId,
@@ -90,9 +115,7 @@ export class BookingsService {
       });
 
       if (activeBooking) {
-        throw new BadRequestException(
-          'Property already has an active booking',
-        );
+        throw new BadRequestException('Property already has an active booking');
       }
 
       const b = await tx.booking.create({
@@ -103,21 +126,40 @@ export class BookingsService {
           amount: new Prisma.Decimal(dto.amount),
         },
         include: {
-          property: true,
-          customer: true,
-          lead: true,
-          assignedTo: {
-            include: { user: true },
+          properties: true,
+          customers: true,
+          leads: true,
+          employees: {
+            include: { users: true },
           },
         },
       });
 
       if (dto.status === 'CONFIRMED') {
+        // Property FSM validation is already checked above; safe to transition
         await tx.property.update({
           where: { id: dto.propertyId },
           data: { status: 'BOOKED' },
         });
       }
+
+      await this.governanceEventPublisher.publish(tx, {
+        eventType: DomainEventTypes.BOOKING_CREATED,
+        entityType: 'Booking',
+        entityId: b.id,
+        companyId,
+        payload: {
+          companyId,
+          userId: currentEmployeeId || 'system',
+          eventType: DomainEventTypes.BOOKING_CREATED,
+          metadata: {
+            bookingAmount: b.amount,
+            propertyTitle: b.properties?.title,
+            customerName: b.customers?.name,
+            status: b.status,
+          },
+        },
+      });
 
       return b;
     });
@@ -130,8 +172,7 @@ export class BookingsService {
 
   async findAll(
     query: QueryBookingDto,
-    companyId: string,
-    myEmployeeId?: string,
+    scopeFilter?: Record<string, any>,
   ) {
     const {
       page = 1,
@@ -149,12 +190,15 @@ export class BookingsService {
       sortOrder = 'desc',
     } = query;
 
-    const where: Prisma.BookingWhereInput = { companyId };
+    const where: Prisma.BookingWhereInput = {
+      companyId: scopeFilter?.companyId ?? '',
+      ...scopeFilter,
+    };
 
     if (search) {
       where.OR = [
-        { property: { title: { contains: search, mode: 'insensitive' } } },
-        { customer: { name: { contains: search, mode: 'insensitive' } } },
+        { properties: { title: { contains: search, mode: 'insensitive' } } },
+        { customers: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -163,9 +207,7 @@ export class BookingsService {
     if (leadId) where.leadId = leadId;
     if (status) where.status = status;
     if (paymentStatus) where.paymentStatus = paymentStatus;
-    if (myEmployeeId) {
-      where.assignedToEmployeeId = myEmployeeId;
-    } else if (assignedToEmployeeId) {
+    if (assignedToEmployeeId && where.assignedToEmployeeId === undefined) {
       where.assignedToEmployeeId = assignedToEmployeeId;
     }
     if (bookingDateFrom || bookingDateTo) {
@@ -183,11 +225,11 @@ export class BookingsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          property: true,
-          customer: true,
-          lead: true,
-          assignedTo: {
-            include: { user: true },
+          properties: true,
+          customers: true,
+          leads: true,
+          employees: {
+            include: { users: true },
           },
         },
       }),
@@ -205,15 +247,18 @@ export class BookingsService {
     };
   }
 
-  async findOne(id: string, companyId: string, employeeId?: string) {
+  async findOne(id: string, scopeFilter?: Record<string, any>) {
     const booking = await this.prisma.booking.findFirst({
-      where: { id, companyId, ...(employeeId && { assignedToEmployeeId: employeeId }) },
+      where: {
+        id,
+        ...scopeFilter,
+      },
       include: {
-        property: true,
-        customer: true,
-        lead: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        customers: true,
+        leads: true,
+        employees: {
+          include: { users: true },
         },
       },
     });
@@ -225,24 +270,39 @@ export class BookingsService {
     return booking;
   }
 
-  async update(id: string, dto: UpdateBookingDto, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
-    const existing = await this.findOne(id, companyId, employeeId);
+  async update(
+    id: string,
+    dto: UpdateBookingDto,
+    companyId: string,
+    scopeFilter?: Record<string, any>,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
+    const existing = await this.findOne(id, scopeFilter);
 
-    if (dto.assignedToEmployeeId !== undefined && dto.assignedToEmployeeId !== existing.assignedToEmployeeId) {
+    if (
+      dto.assignedToEmployeeId !== undefined &&
+      dto.assignedToEmployeeId !== existing.assignedToEmployeeId
+    ) {
       if (dto.assignedToEmployeeId) {
         const assigned = await this.prisma.employee.findFirst({
           where: { id: dto.assignedToEmployeeId, companyId },
         });
         if (!assigned) {
-          throw new BadRequestException('Assigned employee not found in your company');
+          throw new BadRequestException(
+            'Assigned employee not found in your company',
+          );
         }
       }
-      if (currentUserRole === 'EMPLOYEE') {
+      if (isOwnDataScope(currentUserRole!)) {
         throw new BadRequestException('Employees cannot reassign bookings');
       }
     }
 
-    if (dto.propertyId !== undefined && dto.propertyId !== existing.propertyId) {
+    if (
+      dto.propertyId !== undefined &&
+      dto.propertyId !== existing.propertyId
+    ) {
       const property = await this.prisma.property.findFirst({
         where: { id: dto.propertyId, companyId },
       });
@@ -251,7 +311,10 @@ export class BookingsService {
       }
     }
 
-    if (dto.customerId !== undefined && dto.customerId !== existing.customerId) {
+    if (
+      dto.customerId !== undefined &&
+      dto.customerId !== existing.customerId
+    ) {
       const customer = await this.prisma.customer.findFirst({
         where: { id: dto.customerId, companyId },
       });
@@ -269,7 +332,9 @@ export class BookingsService {
       }
     }
 
-    const data: Prisma.BookingUpdateInput = { ...dto };
+    // Strip paymentStatus from general update — use updatePaymentStatus instead
+    const { paymentStatus: _paymentStatus, ...safeDto } = dto as any;
+    const data: Prisma.BookingUpdateInput = { ...safeDto };
 
     if (dto.bookingDate) {
       data.bookingDate = new Date(dto.bookingDate);
@@ -282,11 +347,11 @@ export class BookingsService {
       where: { id },
       data,
       include: {
-        property: true,
-        customer: true,
-        lead: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        customers: true,
+        leads: true,
+        employees: {
+          include: { users: true },
         },
       },
     });
@@ -295,7 +360,16 @@ export class BookingsService {
     return result;
   }
 
-  async updateStatus(id: string, status: BookingStatus, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+  async updateStatus(
+    id: string,
+    status: BookingStatus,
+    companyId: string,
+    scopeFilter?: Record<string, any>,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
+    await this.findOne(id, scopeFilter);
+
     const updated = await this.transitionService.execute({
       entityType: 'Booking',
       id,
@@ -305,9 +379,30 @@ export class BookingsService {
       currentEmployeeId,
       before: async (tx, booking) => {
         if (status === 'CONFIRMED' && booking.propertyId) {
+          // Validate Property FSM transition before setting BOOKED
+          this.transitionService.validate(
+            'Property',
+            booking.properties?.status ?? 'AVAILABLE',
+            'BOOKED',
+          );
           await tx.property.update({
             where: { id: booking.propertyId },
             data: { status: 'BOOKED' },
+          });
+          await this.governanceEventPublisher.publish(tx, {
+            eventType: DomainEventTypes.BOOKING_CONFIRMED,
+            entityType: 'Booking',
+            entityId: id,
+            companyId,
+            payload: {
+              companyId,
+              userId: currentEmployeeId || 'system',
+              eventType: DomainEventTypes.BOOKING_CONFIRMED,
+              metadata: {
+                propertyTitle: booking.properties?.title,
+                customerName: booking.customers?.name,
+              },
+            },
           });
         }
 
@@ -324,6 +419,12 @@ export class BookingsService {
               },
             });
             if (otherActive === 0) {
+              // Validate Property FSM transition before setting AVAILABLE
+              this.transitionService.validate(
+                'Property',
+                property?.status ?? 'BOOKED',
+                'AVAILABLE',
+              );
               await tx.property.update({
                 where: { id: booking.propertyId },
                 data: { status: 'AVAILABLE' },
@@ -338,15 +439,18 @@ export class BookingsService {
         }
       },
       include: {
-        property: true,
-        customer: true,
-        lead: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        customers: true,
+        leads: true,
+        employees: {
+          include: { users: true },
         },
       },
     });
-    this.eventEmitter.emit('booking.updated', { companyId, entityId: id });
+    this.eventEmitter.emit(
+      status === 'CANCELLED' ? 'booking.cancelled' : 'booking.updated',
+      { companyId, entityId: id },
+    );
     return updated;
   }
 
@@ -354,43 +458,82 @@ export class BookingsService {
     id: string,
     paymentStatus: PaymentStatus,
     companyId: string,
-    employeeId?: string,
+    scopeFilter?: Record<string, any>,
     currentUserRole?: string,
     currentEmployeeId?: string,
   ) {
-    const booking = await this.findOne(id, companyId, employeeId);
+    const booking = await this.findOne(id, scopeFilter);
 
-    if (currentUserRole === 'EMPLOYEE' && booking.assignedToEmployeeId !== currentEmployeeId) {
-      throw new BadRequestException('Employees can only update payment status of their own bookings');
+    if (
+      isOwnDataScope(currentUserRole!) &&
+      booking.assignedToEmployeeId !== currentEmployeeId
+    ) {
+      throw new BadRequestException(
+        'Employees can only update payment status of their own bookings',
+      );
+    }
+
+    // Require CONFIRMED booking before allowing COMPLETED payment
+    if (paymentStatus === 'COMPLETED' && booking.status !== 'CONFIRMED') {
+      throw new BadRequestException(
+        'Booking must be CONFIRMED before marking payment as COMPLETED',
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (paymentStatus === 'COMPLETED' && booking.propertyId) {
+        // Validate Property FSM transition before setting SOLD
+        this.transitionService.validate(
+          'Property',
+          booking.properties?.status ?? 'BOOKED',
+          'SOLD',
+        );
         await tx.property.update({
           where: { id: booking.propertyId },
           data: { status: 'SOLD' },
         });
       }
 
-      return tx.booking.update({
+      const b = await tx.booking.update({
         where: { id },
         data: { paymentStatus },
         include: {
-          property: true,
-          customer: true,
-          lead: true,
-          assignedTo: {
-            include: { user: true },
+          properties: true,
+          customers: true,
+          leads: true,
+          employees: {
+            include: { users: true },
           },
         },
       });
+
+      if (paymentStatus === 'COMPLETED') {
+        await this.governanceEventPublisher.publish(tx, {
+          eventType: DomainEventTypes.BOOKING_CONFIRMED,
+          entityType: 'Booking',
+          entityId: id,
+          companyId,
+          payload: {
+            companyId,
+            userId: currentEmployeeId || 'system',
+            eventType: DomainEventTypes.BOOKING_CONFIRMED,
+            metadata: {
+              propertyTitle: b.properties?.title,
+              customerName: b.customers?.name,
+              paymentStatus,
+            },
+          },
+        });
+      }
+
+      return b;
     });
     this.eventEmitter.emit('booking.updated', { companyId, entityId: id });
     return updated;
   }
 
   async remove(id: string, companyId: string) {
-    const booking = await this.findOne(id, companyId);
+    const booking = await this.findOne(id, { companyId });
 
     await this.prisma.$transaction(async (tx) => {
       if (booking.propertyId) {
@@ -406,6 +549,12 @@ export class BookingsService {
             },
           });
           if (otherActive === 0) {
+            // Validate Property FSM transition before setting AVAILABLE
+            this.transitionService.validate(
+              'Property',
+              property.status,
+              'AVAILABLE',
+            );
             await tx.property.update({
               where: { id: booking.propertyId },
               data: { status: 'AVAILABLE' },
@@ -419,7 +568,7 @@ export class BookingsService {
         data: { status: 'CANCELLED' },
       });
 
-      await tx.booking.delete({ where: { id } });
+      await tx.booking.update({ where: { id }, data: { deletedAt: new Date() } });
     });
 
     this.eventEmitter.emit('booking.deleted', { companyId, entityId: id });

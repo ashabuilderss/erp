@@ -18,16 +18,19 @@ import { RequirePermissions } from '../../../common/decorators/permissions.decor
 import { Permissions } from '../../../common/auth/permissions';
 import {
   CurrentCompany,
+  CurrentEmployeeId,
   CurrentUser,
 } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
+import { getDirectScopeFilter } from '../../../common/utils/scope-helper.util';
 
 @Controller('employees')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Get('me')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.ACCOUNTS, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.EMPLOYEE_READ)
   async getMyProfile(
     @CurrentUser('id') userId: string,
@@ -37,6 +40,7 @@ export class EmployeesController {
   }
 
   @Post()
+  @UseIdempotency()
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER)
   @RequirePermissions(Permissions.EMPLOYEE_CREATE)
   async create(
@@ -47,13 +51,24 @@ export class EmployeesController {
   }
 
   @Get()
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.ACCOUNTS)
   @RequirePermissions(Permissions.EMPLOYEE_READ)
   async findAll(
     @Query() query: QueryEmployeeDto,
     @CurrentCompany('id') companyId: string,
+    @CurrentEmployeeId() employeeId: string | null,
+    @CurrentUser('scopes') scopes: Record<string, string>,
+    @CurrentUser('role') role: string,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.employeesService.findAll(query, companyId);
+    const scopeFilter = getDirectScopeFilter(scopes, Permissions.EMPLOYEE_READ, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.employeesService.findAll(query, scopeFilter, role);
   }
 
   @Get(':id')
@@ -75,6 +90,17 @@ export class EmployeesController {
     @CurrentCompany('id') companyId: string,
   ) {
     return this.employeesService.update(id, dto, companyId);
+  }
+
+  @Post(':id/invite')
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.EMPLOYEE_UPDATE)
+  async invite(
+    @Param('id') id: string,
+    @Body('email') email: string,
+    @CurrentCompany('id') companyId: string,
+  ) {
+    return this.employeesService.invite(id, email, companyId);
   }
 
   @Post(':id/revoke-access')

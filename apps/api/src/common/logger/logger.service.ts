@@ -1,11 +1,16 @@
 import { Injectable, ConsoleLogger } from '@nestjs/common';
 import { createWriteStream, WriteStream } from 'fs';
 import { join } from 'path';
+import { CloudWatchLogsClient, PutLogEventsCommand } from '@aws-sdk/client-cloudwatch-logs';
 
 @Injectable()
 export class LoggerService extends ConsoleLogger {
   private infoStream: WriteStream;
   private errorStream: WriteStream;
+  private cwClient: CloudWatchLogsClient | null = null;
+  private readonly logGroupName = 'AshaBuilders-ERP-Prod';
+  private readonly logStreamName = `api-${new Date().toISOString().split('T')[0]}`;
+  private cwSequenceToken: string | undefined = undefined;
 
   constructor() {
     super();
@@ -18,6 +23,20 @@ export class LoggerService extends ConsoleLogger {
     });
     this.infoStream.on('error', () => {});
     this.errorStream.on('error', () => {});
+
+    const region = process.env.AWS_REGION || process.env.S3_REGION || 'ap-south-1';
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY;
+
+    if (process.env.NODE_ENV === 'production' && accessKeyId && secretAccessKey) {
+      this.cwClient = new CloudWatchLogsClient({
+        region,
+        credentials: { accessKeyId, secretAccessKey },
+      });
+      // We do not await stream creation here to avoid blocking startup.
+      // In a real production setup, the stream should exist or be created beforehand,
+      // or we handle ResourceNotFoundException and create it on the fly.
+    }
   }
 
   private buildLogLine(message: any, context?: string): string {
@@ -33,27 +52,53 @@ export class LoggerService extends ConsoleLogger {
     }
   }
 
+  private async pushToCloudWatch(message: string) {
+    if (!this.cwClient) return;
+
+    try {
+      const command = new PutLogEventsCommand({
+        logGroupName: this.logGroupName,
+        logStreamName: this.logStreamName,
+        logEvents: [
+          {
+            message,
+            timestamp: Date.now(),
+          },
+        ],
+        sequenceToken: this.cwSequenceToken,
+      });
+
+      const response = await this.cwClient.send(command);
+      this.cwSequenceToken = response.nextSequenceToken;
+    } catch (err: any) {
+      // Ignore errors to prevent log loops, or handle ResourceNotFound by creating stream.
+    }
+  }
+
   log(message: any, context?: string) {
-    this.safeWrite(this.infoStream, this.buildLogLine(message, context) + '\n');
+    const line = this.buildLogLine(message, context);
+    this.safeWrite(this.infoStream, line + '\n');
+    this.pushToCloudWatch(line);
     super.log(message, context);
   }
 
   error(message: any, stack?: string, context?: string) {
-    this.safeWrite(
-      this.errorStream,
-      this.buildLogLine(message, context) + '\n',
-    );
+    const line = this.buildLogLine(message, context);
+    this.safeWrite(this.errorStream, line + '\n');
+    let cwMsg = line;
     if (stack) {
-      this.safeWrite(
-        this.errorStream,
-        `${new Date().toISOString()} STACK: ${stack}\n`,
-      );
+      const stackLine = `${new Date().toISOString()} STACK: ${stack}`;
+      this.safeWrite(this.errorStream, stackLine + '\n');
+      cwMsg += '\n' + stackLine;
     }
+    this.pushToCloudWatch(cwMsg);
     super.error(message, stack, context);
   }
 
   warn(message: any, context?: string) {
-    this.safeWrite(this.infoStream, this.buildLogLine(message, context) + '\n');
+    const line = this.buildLogLine(message, context);
+    this.safeWrite(this.infoStream, line + '\n');
+    this.pushToCloudWatch(line);
     super.warn(message, context);
   }
 
@@ -63,9 +108,11 @@ export class LoggerService extends ConsoleLogger {
     statusCode: number,
     durationMs: number,
   ) {
+    const line = `${new Date().toISOString()} ${method} ${url} ${statusCode} ${durationMs}ms`;
     this.safeWrite(
       this.infoStream,
-      `${new Date().toISOString()} ${method} ${url} ${statusCode} ${durationMs}ms\n`,
+      line + '\n',
     );
+    this.pushToCloudWatch(line);
   }
 }

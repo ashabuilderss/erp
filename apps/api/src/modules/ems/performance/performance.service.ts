@@ -53,7 +53,7 @@ export class PerformanceService {
 
     return this.prisma.performance.create({
       data: { ...dto, companyId },
-      include: { employee: { include: { user: true, department: true } } },
+      include: { employees: { include: { users: true, departments: true } } },
     });
   }
 
@@ -78,11 +78,13 @@ export class PerformanceService {
       where.OR = [
         { notes: { contains: search, mode: 'insensitive' } },
         {
-          employee: { employeeCode: { contains: search, mode: 'insensitive' } },
+          employees: {
+            employeeCode: { contains: search, mode: 'insensitive' },
+          },
         },
         {
-          employee: {
-            user: { firstName: { contains: search, mode: 'insensitive' } },
+          employees: {
+            users: { firstName: { contains: search, mode: 'insensitive' } },
           },
         },
       ];
@@ -94,7 +96,7 @@ export class PerformanceService {
         orderBy: { [safeSortBy(sortBy, ALLOWED_SORT, 'createdAt')]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
-        include: { employee: { include: { user: true, department: true } } },
+        include: { employees: { include: { users: true, departments: true } } },
       }),
       this.prisma.performance.count({ where }),
     ]);
@@ -108,7 +110,7 @@ export class PerformanceService {
   async findOne(id: string, companyId: string) {
     const performance = await this.prisma.performance.findFirst({
       where: { id, companyId },
-      include: { employee: { include: { user: true, department: true } } },
+      include: { employees: { include: { users: true, departments: true } } },
     });
     if (!performance)
       throw new NotFoundException(`Performance with ID ${id} not found`);
@@ -135,13 +137,13 @@ export class PerformanceService {
     return this.prisma.performance.update({
       where: { id },
       data: dto,
-      include: { employee: { include: { user: true } } },
+      include: { employees: { include: { users: true } } },
     });
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    return this.prisma.performance.delete({ where: { id } });
+    return this.prisma.performance.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   async getEmployeePerformance(
@@ -155,7 +157,7 @@ export class PerformanceService {
     return this.prisma.performance.findMany({
       where,
       orderBy: [{ year: 'asc' }, { quarter: 'asc' }],
-      include: { employee: { include: { user: true } } },
+      include: { employees: { include: { users: true } } },
     });
   }
 

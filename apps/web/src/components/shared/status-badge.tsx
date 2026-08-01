@@ -6,10 +6,8 @@ interface StatusBadgeConfig {
 }
 
 const statusMap: Record<string, StatusBadgeConfig> = {
-  PRESENT: { label: "Present", className: "bg-green-100 text-green-800" },
-  ABSENT: { label: "Absent", className: "bg-red-100 text-red-800" },
-  HALF_DAY: { label: "Half Day", className: "bg-yellow-100 text-yellow-800" },
-  LEAVE: { label: "Leave", className: "bg-blue-100 text-blue-800" },
+  COMPLETED: { label: "Completed", className: "bg-green-100 text-green-800" },
+  UNDER_REVIEW: { label: "Under Review", className: "bg-yellow-100 text-yellow-800" },
   PENDING: { label: "Pending", className: "bg-yellow-100 text-yellow-800" },
   APPROVED: { label: "Approved", className: "bg-green-100 text-green-800" },
   REJECTED: { label: "Rejected", className: "bg-red-100 text-red-800" },
@@ -28,7 +26,6 @@ const statusMap: Record<string, StatusBadgeConfig> = {
   CONVERTED: { label: "Converted", className: "bg-green-100 text-green-800" },
   LOST: { label: "Lost", className: "bg-red-100 text-red-800" },
   SCHEDULED: { label: "Scheduled", className: "bg-blue-100 text-blue-800" },
-  COMPLETED: { label: "Completed", className: "bg-green-100 text-green-800" },
   CANCELLED: { label: "Cancelled", className: "bg-red-100 text-red-800" },
   RESCHEDULED: { label: "Rescheduled", className: "bg-orange-100 text-orange-800" },
   CONFIRMED: { label: "Confirmed", className: "bg-green-100 text-green-800" },

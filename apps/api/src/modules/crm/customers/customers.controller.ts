@@ -20,13 +20,15 @@ import {
   CurrentUser,
   CurrentCompany,
 } from '../../../common/decorators/current-user.decorator';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
 
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS)
   @RequirePermissions(Permissions.CUSTOMER_CREATE)
   async create(
     @Body() dto: CreateCustomerDto,
@@ -37,7 +39,7 @@ export class CustomersController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS)
   @RequirePermissions(Permissions.CUSTOMER_READ)
   async findAll(
     @Query() query: QueryCustomerDto,
@@ -47,7 +49,7 @@ export class CustomersController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS)
   @RequirePermissions(Permissions.CUSTOMER_READ)
   async findOne(
     @Param('id') id: string,
@@ -57,7 +59,7 @@ export class CustomersController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS)
   @RequirePermissions(Permissions.CUSTOMER_UPDATE)
   async update(
     @Param('id') id: string,

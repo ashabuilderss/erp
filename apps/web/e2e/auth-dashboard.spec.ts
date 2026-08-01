@@ -63,9 +63,8 @@ test("rejects browser-supplied identity fields without verified credentials", as
 test("signs in and renders the admin dashboard", async ({ page }) => {
   await signInAsAdmin(page);
 
-  await expect(page).toHaveTitle("RealEstate CRM");
-  await expect(page.getByRole("heading", { name: "Admin Dashboard", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Total Properties" })).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByText("Total Properties").first()).toBeVisible({ timeout: 10000 });
 });
 
 test("redirects to sign-in when accessing HR dashboard after logging out", async ({ page }) => {

@@ -12,6 +12,9 @@ import { QueryLeadDto } from './dto/query-lead.dto';
 import { LeadStatus, Prisma } from '@prisma/client';
 import { safeSortBy } from '../../../common/utils/sort-by';
 import { NotificationEvents } from '../../notifications/events/notification-events';
+import { GovernanceEventPublisher } from '../../governance-events/governance-event.publisher';
+import { DomainEventTypes } from '../../governance-events/types/events';
+import { isOwnDataScope } from '../../../common/utils/role-scope.util';
 
 const ALLOWED_SORT = [
   'createdAt',
@@ -28,17 +31,23 @@ export class LeadsService {
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
     private transitionService: TransitionService,
+    private governanceEventPublisher: GovernanceEventPublisher,
   ) {}
 
   async getMyLeads(employeeId: string, companyId: string) {
     return this.prisma.lead.findMany({
-      where: { assignedToEmployeeId: employeeId, companyId },
-      include: { property: true, assignedTo: { include: { user: true } } },
+      where: { assignedToEmployeeId: employeeId, companyId, deletedAt: null },
+      include: { properties: true, employees: { include: { users: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async create(dto: CreateLeadDto, companyId: string, currentUserRole?: string, currentEmployeeId?: string) {
+  async create(
+    dto: CreateLeadDto,
+    companyId: string,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
     const { customerId, ...rest } = dto;
 
     if (dto.assignedToEmployeeId) {
@@ -46,7 +55,9 @@ export class LeadsService {
         where: { id: dto.assignedToEmployeeId, companyId },
       });
       if (!assigned) {
-        throw new BadRequestException('Assigned employee not found in your company');
+        throw new BadRequestException(
+          'Assigned employee not found in your company',
+        );
       }
     }
 
@@ -68,8 +79,14 @@ export class LeadsService {
       }
     }
 
-    if (currentUserRole === 'EMPLOYEE' && dto.assignedToEmployeeId !== currentEmployeeId) {
-      throw new BadRequestException('Employees can only create leads assigned to themselves');
+    if (
+      isOwnDataScope(currentUserRole!) &&
+      dto.assignedToEmployeeId != null &&
+      dto.assignedToEmployeeId !== currentEmployeeId
+    ) {
+      throw new BadRequestException(
+        'Employees can only create leads assigned to themselves',
+      );
     }
 
     const lead = await this.prisma.lead.create({
@@ -79,18 +96,18 @@ export class LeadsService {
         companyId,
       },
       include: {
-        property: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        employees: {
+          include: { users: true },
         },
-        convertedToCustomer: true,
+        customers: true,
       },
     });
     this.eventEmitter.emit('lead.created', { companyId, entityId: lead.id });
     return lead;
   }
 
-  async findAll(query: QueryLeadDto, companyId: string, myEmployeeId?: string) {
+  async findAll(query: QueryLeadDto, scopeFilter?: Record<string, any>) {
     const {
       page = 1,
       limit = 10,
@@ -103,7 +120,12 @@ export class LeadsService {
       sortOrder = 'desc',
     } = query;
 
-    const where: Prisma.LeadWhereInput = { companyId };
+    const companyId = scopeFilter?.companyId ?? '';
+    const where: Prisma.LeadWhereInput = {
+      companyId,
+      deletedAt: null,
+      ...scopeFilter,
+    };
 
     if (search) {
       where.OR = [
@@ -116,9 +138,8 @@ export class LeadsService {
     if (propertyId) where.propertyId = propertyId;
     if (source) where.source = source;
     if (status) where.status = status;
-    if (myEmployeeId) {
-      where.assignedToEmployeeId = myEmployeeId;
-    } else if (assignedToEmployeeId) {
+    // Only apply explicit assignedToEmployeeId filter if scope hasn't already restricted it
+    if (assignedToEmployeeId && where.assignedToEmployeeId === undefined) {
       where.assignedToEmployeeId = assignedToEmployeeId;
     }
 
@@ -129,11 +150,11 @@ export class LeadsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          property: true,
-          assignedTo: {
-            include: { user: true },
+          properties: true,
+          employees: {
+            include: { users: true },
           },
-          convertedToCustomer: true,
+          customers: true,
         },
       }),
       this.prisma.lead.count({ where }),
@@ -150,15 +171,19 @@ export class LeadsService {
     };
   }
 
-  async findOne(id: string, companyId: string, employeeId?: string) {
+  async findOne(id: string, scopeFilter?: Record<string, any>) {
     const lead = await this.prisma.lead.findFirst({
-      where: { id, companyId, ...(employeeId && { assignedToEmployeeId: employeeId }) },
+      where: {
+        id,
+        deletedAt: null,
+        ...scopeFilter,
+      },
       include: {
-        property: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        employees: {
+          include: { users: true },
         },
-        convertedToCustomer: true,
+        customers: true,
         siteVisits: true,
         bookings: true,
       },
@@ -171,19 +196,31 @@ export class LeadsService {
     return lead;
   }
 
-  async update(id: string, dto: UpdateLeadDto, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
-    const before = await this.findOne(id, companyId, employeeId);
+  async update(
+    id: string,
+    dto: UpdateLeadDto,
+    companyId: string,
+    scopeFilter?: Record<string, any>,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
+    const before = await this.findOne(id, scopeFilter);
 
-    if (dto.assignedToEmployeeId !== undefined && dto.assignedToEmployeeId !== before.assignedToEmployeeId) {
+    if (
+      dto.assignedToEmployeeId !== undefined &&
+      dto.assignedToEmployeeId !== before.assignedToEmployeeId
+    ) {
       if (dto.assignedToEmployeeId) {
         const assigned = await this.prisma.employee.findFirst({
           where: { id: dto.assignedToEmployeeId, companyId },
         });
         if (!assigned) {
-          throw new BadRequestException('Assigned employee not found in your company');
+          throw new BadRequestException(
+            'Assigned employee not found in your company',
+          );
         }
       }
-      if (currentUserRole === 'EMPLOYEE') {
+      if (isOwnDataScope(currentUserRole!)) {
         throw new BadRequestException('Employees cannot reassign leads');
       }
     }
@@ -220,11 +257,11 @@ export class LeadsService {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       data: updateData,
       include: {
-        property: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        employees: {
+          include: { users: true },
         },
-        convertedToCustomer: true,
+        customers: true,
       },
     });
 
@@ -232,10 +269,10 @@ export class LeadsService {
       dto.assignedToEmployeeId &&
       dto.assignedToEmployeeId !== before.assignedToEmployeeId
     ) {
-      const assignedTo = updated.assignedTo;
-      if (assignedTo?.user) {
+      const assignedTo = updated.employees;
+      if (assignedTo?.users) {
         this.eventEmitter.emit(NotificationEvents.LeadAssigned, {
-          userId: assignedTo.user.id,
+          userId: assignedTo.users.id,
           companyId,
           title: 'New Lead Assigned',
           message: `Lead "${updated.customerName}" has been assigned to you`,
@@ -249,7 +286,23 @@ export class LeadsService {
     return updated;
   }
 
-  async updateStatus(id: string, status: LeadStatus, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+  async updateStatus(
+    id: string,
+    status: LeadStatus,
+    companyId: string,
+    scopeFilter?: Record<string, any>,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+    lostReason?: string,
+  ) {
+    if (status === LeadStatus.LOST && !lostReason) {
+      throw new BadRequestException(
+        'lostReason is required when status is LOST',
+      );
+    }
+
+    await this.findOne(id, scopeFilter);
+
     const updated = await this.transitionService.execute({
       entityType: 'Lead',
       id,
@@ -257,23 +310,44 @@ export class LeadsService {
       companyId,
       currentUserRole,
       currentEmployeeId,
+      before: lostReason
+        ? async (tx: any, _entity: any) => {
+            await tx.lead.update({
+              where: { id },
+              data: { lostReason },
+            });
+          }
+        : undefined,
       include: {
-        property: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        employees: {
+          include: { users: true },
         },
-        convertedToCustomer: true,
+        customers: true,
       },
     });
     this.eventEmitter.emit('lead.updated', { companyId, entityId: id });
     return updated;
   }
 
-  async convertToCustomer(id: string, companyId: string, employeeId?: string) {
-    const lead = await this.findOne(id, companyId, employeeId);
+  async convertToCustomer(id: string, scopeFilter?: Record<string, any>) {
+    const lead = await this.findOne(id, scopeFilter);
+    const companyId = scopeFilter?.companyId ?? '';
 
     if (lead.status === 'CONVERTED' && lead.convertedToCustomerId) {
       throw new BadRequestException('Lead is already converted to a customer');
+    }
+
+    // Validate Lead FSM transition before converting
+    this.transitionService.validate('Lead', lead.status, 'CONVERTED');
+
+    // Validate Property FSM transition if lead has an associated property
+    if (lead.propertyId && lead.properties?.status) {
+      this.transitionService.validate(
+        'Property',
+        lead.properties.status,
+        'BOOKED',
+      );
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -290,13 +364,6 @@ export class LeadsService {
         },
       });
 
-      if (lead.propertyId) {
-        await tx.property.update({
-          where: { id: lead.propertyId },
-          data: { status: 'BOOKED' },
-        });
-      }
-
       const updatedLead = await tx.lead.update({
         where: { id },
         data: {
@@ -304,11 +371,38 @@ export class LeadsService {
           convertedToCustomerId: customer.id,
         },
         include: {
-          property: true,
-          assignedTo: {
-            include: { user: true },
+          properties: true,
+          employees: {
+            include: { users: true },
           },
-          convertedToCustomer: true,
+          customers: true,
+        },
+      });
+
+      // Mark associated property as BOOKED when lead converts
+      if (lead.propertyId) {
+        await tx.property.update({
+          where: { id: lead.propertyId },
+          data: { status: 'BOOKED' },
+        });
+      }
+
+      await this.governanceEventPublisher.publish(tx, {
+        eventType: DomainEventTypes.LEAD_STATUS_CHANGED,
+        entityType: 'Lead',
+        entityId: id,
+        companyId,
+        payload: {
+          companyId,
+          userId: lead.assignedToEmployeeId || 'system',
+          eventType: DomainEventTypes.LEAD_STATUS_CHANGED,
+          metadata: {
+            previousStatus: lead.status,
+            newStatus: 'CONVERTED',
+            leadName: lead.customerName,
+            convertedToCustomerId: customer.id,
+            convertedToCustomerName: customer.name,
+          },
         },
       });
 
@@ -317,7 +411,7 @@ export class LeadsService {
 
     this.eventEmitter.emit('lead.updated', { companyId, entityId: id });
 
-    const assignedUser = result.lead.assignedTo?.user;
+    const assignedUser = result.lead.employees?.users;
     if (assignedUser) {
       this.eventEmitter.emit(NotificationEvents.LeadConverted, {
         userId: assignedUser.id,
@@ -333,8 +427,12 @@ export class LeadsService {
   }
 
   async remove(id: string, companyId: string) {
-    await this.findOne(id, companyId);
-    await this.prisma.lead.delete({ where: { id } });
+    await this.findOne(id, { companyId });
+    await this.prisma.lead.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     this.eventEmitter.emit('lead.deleted', { companyId, entityId: id });
+    return { success: true };
   }
 }

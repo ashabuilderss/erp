@@ -34,6 +34,11 @@ const assignTypeColors: Record<string, string> = {
 const scoreColor = (score: number) =>
   score >= 80 ? "bg-green-100 text-green-800" : score >= 60 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800";
 
+function getEmployeeName(e: { user?: { firstName: string; lastName: string }; users?: { firstName: string; lastName: string }; employeeCode: string }): string {
+  const u = (e as { users?: { firstName: string; lastName: string } }).users ?? e.user;
+  return u ? `${u.firstName} ${u.lastName}` : e.employeeCode;
+}
+
 export default function EMSPage() {
   const [pQuery, setPQuery] = useState({ page: 1, limit: 5, sortBy: "createdAt", sortOrder: "desc" as const });
   const { data: perfData, isLoading: perfLoading } = usePerformance(pQuery);
@@ -46,12 +51,12 @@ export default function EMSPage() {
   const resetPerfForm = () => setPerfForm({ employeeId: "", year: new Date().getFullYear(), quarter: 1, score: 0, notes: "" });
 
   const { data: empData } = useEmployees({ limit: 200 });
-  const employees = (empData?.data || []).filter((e) => e.user?.role === "EMPLOYEE");
+  const employees = (empData?.data || []);
 
-  const { data: propData } = useProperties({ limit: 200 });
-  const { data: leadData } = useLeads({ limit: 200 });
-  const { data: svData } = useSiteVisits({ limit: 200 });
-  const { data: bookData } = useBookings({ limit: 200 });
+  const { data: propData } = useProperties({ limit: 100 });
+  const { data: leadData } = useLeads({ limit: 100 });
+  const { data: svData } = useSiteVisits({ limit: 100 });
+  const { data: bookData } = useBookings({ limit: 100 });
   const properties = propData?.data || [];
   const leads = leadData?.data || [];
   const siteVisits = svData?.data || [];
@@ -118,7 +123,7 @@ export default function EMSPage() {
             <DialogContent className="sm:max-w-sm">
               <DialogHeader><DialogTitle>{perfEdit ? "Edit" : "Add"} Performance Review</DialogTitle></DialogHeader>
               <div className="space-y-3">
-                <div><label className="text-sm font-medium">Employee</label><Select value={perfForm.employeeId || ""} onValueChange={(v) => setPerfForm({ ...perfForm, employeeId: v } as PerformanceForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
+                <div><label className="text-sm font-medium">Employee</label><Select value={perfForm.employeeId || ""} onValueChange={(v) => setPerfForm({ ...perfForm, employeeId: v } as PerformanceForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{getEmployeeName(e)}</SelectItem>)}</SelectContent></Select></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="text-sm font-medium">Year</label><Input type="number" value={perfForm.year || new Date().getFullYear()} onChange={(e) => setPerfForm({ ...perfForm, year: Number(e.target.value) } as PerformanceForm)} /></div>
                   <div><label className="text-sm font-medium">Quarter</label><Select value={String(perfForm.quarter || 1)} onValueChange={(v) => setPerfForm({ ...perfForm, quarter: Number(v) } as PerformanceForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[1, 2, 3, 4].map(q => <SelectItem key={q} value={String(q)}>Q{q}</SelectItem>)}</SelectContent></Select></div>
@@ -157,7 +162,7 @@ export default function EMSPage() {
             <DialogContent className="sm:max-w-sm">
               <DialogHeader><DialogTitle>{assignEdit ? "Edit" : "Add"} Assignment</DialogTitle></DialogHeader>
               <div className="space-y-3">
-                <div><label className="text-sm font-medium">Employee</label><Select value={assignForm.employeeId || ""} onValueChange={(v) => setAssignForm({ ...assignForm, employeeId: v } as AssignmentForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
+                <div><label className="text-sm font-medium">Employee</label><Select value={assignForm.employeeId || ""} onValueChange={(v) => setAssignForm({ ...assignForm, employeeId: v } as AssignmentForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{getEmployeeName(e)}</SelectItem>)}</SelectContent></Select></div>
                 <div><label className="text-sm font-medium">Type</label><Select value={assignForm.type || "PROPERTY"} onValueChange={(v) => { setAssignForm({ ...assignForm, type: v, entityId: "" } as AssignmentForm); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PROPERTY">Property</SelectItem><SelectItem value="LEAD">Lead</SelectItem><SelectItem value="SITE_VISIT">Site Visit</SelectItem><SelectItem value="BOOKING">Booking</SelectItem></SelectContent></Select></div>
                 <div><label className="text-sm font-medium">Entity</label><Select value={assignForm.entityId || ""} onValueChange={(v) => setAssignForm({ ...assignForm, entityId: v } as AssignmentForm)}><SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger><SelectContent>{getEntitiesByType(assignForm.type || "PROPERTY").map((e) => <SelectItem key={e.id} value={e.id}>{e.label}</SelectItem>)}</SelectContent></Select></div>
                 <div className="grid grid-cols-2 gap-2">

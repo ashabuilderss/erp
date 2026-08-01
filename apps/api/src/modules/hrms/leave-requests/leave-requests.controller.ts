@@ -23,13 +23,15 @@ import {
   CurrentCompany,
   CurrentEmployeeId,
 } from '../../../common/decorators/current-user.decorator';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
+import { getScopedEmployeeId } from '../../../common/utils/role-scope.util';
 
 @Controller('leave-requests')
 export class LeaveRequestsController {
   constructor(private readonly leaveRequestsService: LeaveRequestsService) {}
 
   @Get('me')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_READ)
   async getMyLeaveRequests(
     @Query() query: QueryLeaveRequestDto,
@@ -40,7 +42,8 @@ export class LeaveRequestsController {
   }
 
   @Post('me')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_CREATE)
   async createMyLeaveRequest(
     @Body() dto: CreateLeaveRequestDto,
@@ -55,7 +58,8 @@ export class LeaveRequestsController {
   }
 
   @Post()
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_CREATE)
   async create(
     @Body() dto: CreateLeaveRequestDto,
@@ -66,12 +70,12 @@ export class LeaveRequestsController {
     return this.leaveRequestsService.create(
       dto,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
     );
   }
 
   @Get()
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_READ)
   async findAll(
     @Query() query: QueryLeaveRequestDto,
@@ -82,12 +86,12 @@ export class LeaveRequestsController {
     return this.leaveRequestsService.findAll(
       query,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
     );
   }
 
   @Get('pending-count')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_READ)
   async getPendingCount(
     @CurrentCompany('id') companyId: string,
@@ -96,12 +100,12 @@ export class LeaveRequestsController {
   ) {
     return this.leaveRequestsService.getPendingCount(
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
     );
   }
 
   @Get(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_READ)
   async findOne(
     @Param('id') id: string,
@@ -109,12 +113,12 @@ export class LeaveRequestsController {
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentUser('role') role: string,
   ) {
-    const owningEmployeeId = role === 'EMPLOYEE' ? employeeId! : undefined;
+    const owningEmployeeId = getScopedEmployeeId(role, employeeId);
     return this.leaveRequestsService.findOne(id, companyId, owningEmployeeId);
   }
 
   @Patch(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_CREATE)
   async update(
     @Param('id') id: string,
@@ -127,7 +131,7 @@ export class LeaveRequestsController {
       id,
       dto,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
     );
   }
 

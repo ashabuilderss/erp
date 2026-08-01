@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { useLeads, useCreateLead, useUpdateLead, useUpdateLeadStatus, useConvertLead, useDeleteLead, useProperties, useEmployees, useCustomers } from "@/hooks/api";
+import { useLeads, useCreateLead, useUpdateLead, useUpdateLeadStatus, useConvertLead, useDeleteLead, useProperties, useEmployees, useCustomers, useCurrentUser } from "@/hooks/api";
 import { useToast } from "@/components/ui/toast";
 import { getApiErrorMessage } from "@/lib/api";
 import type { CreateLeadDto, Lead, UpdateLeadDto } from "@/lib/types";
@@ -47,6 +47,9 @@ export default function LeadsPage() {
   const convertMutation = useConvertLead();
   const updateStatusMutation = useUpdateLeadStatus();
   const { showToast } = useToast();
+  const { data: currentUser } = useCurrentUser();
+  const role = currentUser?.user?.role;
+  const canManage = role === "OWNER" || role === "ADMIN";
   const [form, setForm] = useState<LeadForm>({});
   const [errors, setErrors] = useState<Partial<Record<"customerName", string>>>({});
   const [confirmAction, setConfirmAction] = useState<{ type: "delete" | "convert"; leadId: string } | null>(null);
@@ -90,8 +93,10 @@ export default function LeadsPage() {
     { id: "actions", header: "", cell: ({ row }) => (
       <div className="flex items-center gap-1">
         {row.original.status !== "CONVERTED" && <Button variant="ghost" size="icon-sm" onClick={() => setConfirmAction({ type: "convert", leadId: row.original.id })}><ArrowRight className="h-4 w-4 text-green-600" /></Button>}
-        <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ customerName: row.original.customerName, customerEmail: row.original.customerEmail ?? undefined, customerPhone: row.original.customerPhone ?? undefined, source: row.original.source, status: row.original.status, notes: row.original.notes ?? undefined, propertyId: row.original.propertyId ?? undefined, assignedToEmployeeId: row.original.assignedToEmployeeId ?? undefined, customerId: row.original.convertedToCustomerId ?? undefined } as LeadForm); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmAction({ type: "delete", leadId: row.original.id })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        {canManage && (<>
+          <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ customerName: row.original.customerName, customerEmail: row.original.customerEmail ?? undefined, customerPhone: row.original.customerPhone ?? undefined, source: row.original.source, status: row.original.status, notes: row.original.notes ?? undefined, propertyId: row.original.propertyId ?? undefined, assignedToEmployeeId: row.original.assignedToEmployeeId ?? undefined, customerId: row.original.convertedToCustomerId ?? undefined } as LeadForm); }}><Pencil className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon-sm" onClick={() => setConfirmAction({ type: "delete", leadId: row.original.id })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        </>)}
       </div>
     )},
   ];
@@ -100,6 +105,7 @@ export default function LeadsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h2 className="text-2xl font-semibold">Leads</h2><p className="text-sm text-muted-foreground">Track and manage your leads</p></div>
+        {canManage && (
         <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Lead</DialogTrigger>
           <DialogContent className="sm:max-w-md">
@@ -118,6 +124,7 @@ export default function LeadsPage() {
             <DialogFooter showCloseButton><Button onClick={() => { const rules: ValidationRules<LeadForm> = { customerName: { required: "Customer name is required" } }; const fieldErrors = validateForm(form, rules); setErrors(fieldErrors); if (Object.keys(fieldErrors).length > 0) return; const dto: CreateLeadDto = { customerName: form.customerName!, customerEmail: form.customerEmail || undefined, customerPhone: form.customerPhone || undefined, source: form.source!, status: form.status!, notes: form.notes || undefined, propertyId: form.propertyId || undefined, assignedToEmployeeId: form.assignedToEmployeeId || undefined, customerId: form.customerId || undefined }; createMutation.mutate(dto, { onSuccess: () => { setCreateOpen(false); resetForm(); setErrors({}); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create lead"), "error") }); }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -163,7 +170,7 @@ export default function LeadsPage() {
             <div><label className="text-sm font-medium">Property</label><Select value={form.propertyId || ""} onValueChange={(v) => setForm({ ...form, propertyId: v || undefined } as LeadForm)}><SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger><SelectContent>{properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent></Select></div>
             <div><label className="text-sm font-medium">Assigned To</label><Select value={form.assignedToEmployeeId || ""} onValueChange={(v) => setForm({ ...form, assignedToEmployeeId: v || undefined } as LeadForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
           </div>
-          <DialogFooter showCloseButton><Button onClick={() => { if (editItem) { const rules: ValidationRules<LeadForm> = { customerName: { required: "Customer name is required" } }; const fieldErrors = validateForm(form, rules); setErrors(fieldErrors); if (Object.keys(fieldErrors).length > 0) return; const dto: UpdateLeadDto = { customerName: form.customerName!, customerEmail: form.customerEmail || undefined, customerPhone: form.customerPhone || undefined, source: form.source!, status: form.status!, notes: form.notes || undefined, propertyId: form.propertyId || undefined, assignedToEmployeeId: form.assignedToEmployeeId || undefined, customerId: form.customerId || undefined }; updateMutation.mutate({ id: editItem.id, dto }, { onSuccess: () => { setEditItem(null); setErrors({}); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update lead"), "error") }); } }} disabled={updateMutation.isPending}>Save</Button></DialogFooter>
+          <DialogFooter showCloseButton><Button onClick={() => { if (editItem) { const rules: ValidationRules<LeadForm> = { customerName: { required: "Customer name is required" } }; const fieldErrors = validateForm(form, rules); setErrors(fieldErrors); if (Object.keys(fieldErrors).length > 0) return; const dto: UpdateLeadDto = { customerName: form.customerName!, customerEmail: form.customerEmail || undefined, customerPhone: form.customerPhone || undefined, source: form.source!, notes: form.notes || undefined, propertyId: form.propertyId || undefined, assignedToEmployeeId: form.assignedToEmployeeId || undefined, customerId: form.customerId || undefined }; const onEditDone = () => { setEditItem(null); setErrors({}); }; const doUpdate = () => updateMutation.mutate({ id: editItem.id, dto }, { onSuccess: onEditDone, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update lead"), "error") }); if (form.status && form.status !== editItem.status) { updateStatusMutation.mutate({ id: editItem.id, status: form.status }, { onSuccess: doUpdate, onError: (err) => showToast(getApiErrorMessage(err, "Failed to update status"), "error") }); } else { doUpdate(); } } } } disabled={updateMutation.isPending}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

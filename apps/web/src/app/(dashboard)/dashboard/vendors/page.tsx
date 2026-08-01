@@ -35,6 +35,8 @@ export default function VendorsPage() {
   const [form, setForm] = useState<Partial<Vendor>>({});
   const [errors, setErrors] = useState<Partial<Record<"name", string>>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const { data: currentUser } = useCurrentUser();
+  const canManage = ["OWNER", "ADMIN"].includes(currentUser?.user?.role || "");
 
   const resetForm = () => setForm({ name: "", contactPerson: "", phone: "", email: "", address: "", gstin: "", status: "ACTIVE" });
 
@@ -44,11 +46,17 @@ export default function VendorsPage() {
     { accessorKey: "phone", header: "Phone", cell: ({ row }) => <span>{row.original.phone || "-"}</span> },
     { accessorKey: "email", header: "Email", cell: ({ row }) => <span>{row.original.email || "-"}</span> },
     { accessorKey: "gstin", header: "GSTIN", cell: ({ row }) => <span>{row.original.gstin || "-"}</span> },
+    { accessorKey: "rating", header: "Rating", cell: ({ row }) => <span>{row.original.rating ? `${row.original.rating} / 5` : "-"}</span> },
+    { accessorKey: "isBlacklisted", header: "Blacklisted", cell: ({ row }) => <Badge variant="outline" className={row.original.isBlacklisted ? "bg-red-100 text-red-800" : ""}>{row.original.isBlacklisted ? "YES" : "NO"}</Badge> },
     { accessorKey: "status", header: "Status", cell: ({ row }) => <Badge variant="outline" className={statusColors[row.original.status]}>{row.original.status}</Badge> },
     { id: "actions", header: "", cell: ({ row }) => (
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ name: row.original.name, status: row.original.status, contactPerson: row.original.contactPerson ?? undefined, phone: row.original.phone ?? undefined, email: row.original.email ?? undefined, address: row.original.address ?? undefined, gstin: row.original.gstin ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        {canManage && (
+          <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ name: row.original.name, status: row.original.status, contactPerson: row.original.contactPerson ?? undefined, phone: row.original.phone ?? undefined, email: row.original.email ?? undefined, address: row.original.address ?? undefined, gstin: row.original.gstin ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
+        )}
+        {canManage && (
+          <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        )}
       </div>
     )},
   ];
@@ -57,6 +65,7 @@ export default function VendorsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h2 className="text-2xl font-semibold">Vendors</h2><p className="text-sm text-muted-foreground">Manage your vendors and contractors</p></div>
+        {canManage && (
         <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Vendor</DialogTrigger>
           <DialogContent className="sm:max-w-md">
@@ -73,6 +82,7 @@ export default function VendorsPage() {
             <DialogFooter><Button onClick={() => { const rules: ValidationRules<CreateVendorDto> = { name: { required: "Name is required" } }; const errs = validateForm(form, rules); setErrors(errs); if (Object.keys(errs).length > 0) return; createMutation.mutate({ name: form.name!, contactPerson: form.contactPerson || undefined, phone: form.phone || undefined, email: form.email || undefined, address: form.address || undefined, gstin: form.gstin || undefined, status: form.status || "ACTIVE" } as CreateVendorDto, { onSuccess: () => { setErrors({}); showToast("Vendor created"); setCreateOpen(false); resetForm(); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create vendor"), "error") }); }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <DataTable columns={columns} data={data?.data || []} isLoading={isLoading} searchKey="vendors" onSearchChange={(s) => setQuery(prev => ({ ...prev, search: s, page: 1 }))} pageCount={data?.meta?.totalPages} totalRecords={data?.meta?.total} onPaginationChange={(pageIndex, pageSize) => setQuery(prev => ({ ...prev, page: pageIndex + 1, limit: pageSize }))} />

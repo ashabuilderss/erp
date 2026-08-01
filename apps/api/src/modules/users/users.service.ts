@@ -54,12 +54,21 @@ export class UsersService {
         orderBy: { [safeSortBy(sortBy, ALLOWED_SORT, 'createdAt')]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
-        include: {
-          employee: {
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          notificationPreferences: true,
+          employees: {
             select: {
               id: true,
               employeeCode: true,
-              department: { select: { name: true } },
+              departments: { select: { name: true } },
             },
           },
         },
@@ -77,7 +86,7 @@ export class UsersService {
     const user = await this.prisma.user.findFirst({
       where: { id, companyId },
       include: {
-        employee: { include: { department: true, designation: true } },
+        employees: { include: { departments: true, designations: true } },
       },
     });
     if (!user) throw new NotFoundException(`User with ID ${id} not found`);
@@ -90,7 +99,7 @@ export class UsersService {
       where: { id },
       data: dto,
       include: {
-        employee: { select: { id: true, employeeCode: true } },
+        employees: { select: { id: true, employeeCode: true } },
       },
     });
     this.eventEmitter.emit('user.updated', { companyId, entityId: id });

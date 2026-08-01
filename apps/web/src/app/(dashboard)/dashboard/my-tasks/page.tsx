@@ -1,119 +1,107 @@
-"use client";
+'use client';
 
-import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Building2, Users, MapPin, FileText, CheckCircle, Clock, AlertCircle, ClipboardList } from "lucide-react";
-import { EmptyState } from "@/components/shared/empty-state";
-import type { LucideIcon } from "lucide-react";
-import { useSiteVisits, useBookings, useLeads, useProperties } from "@/hooks/api";
-import { useCurrentUser } from "@/hooks/api";
-import { format } from "date-fns";
-import Link from "next/link";
-
-const statusColors: Record<string, string> = {
-  SCHEDULED: "bg-blue-100 text-blue-800", COMPLETED: "bg-green-100 text-green-800",
-  CANCELLED: "bg-red-100 text-red-800", RESCHEDULED: "bg-yellow-100 text-yellow-800",
-  PENDING: "bg-yellow-100 text-yellow-800", CONFIRMED: "bg-green-100 text-green-800",
-  NEW: "bg-blue-100 text-blue-800", CONTACTED: "bg-purple-100 text-purple-800",
-  INTERESTED: "bg-indigo-100 text-indigo-800", SITE_VISIT_SCHEDULED: "bg-orange-100 text-orange-800",
-  NEGOTIATION: "bg-pink-100 text-pink-800", CONVERTED: "bg-green-100 text-green-800",
-  LOST: "bg-red-100 text-red-800",
-  AVAILABLE: "bg-green-100 text-green-800", RESERVED: "bg-yellow-100 text-yellow-800",
-  BOOKED: "bg-blue-100 text-blue-800", SOLD: "bg-purple-100 text-purple-800",
-};
-
-const typeConfig: Record<string, { label: string; icon: LucideIcon; href: string }> = {
-  SITE_VISIT: { label: "Site Visit", icon: MapPin, href: "/dashboard/site-visits" },
-  BOOKING: { label: "Booking", icon: FileText, href: "/dashboard/bookings" },
-  LEAD: { label: "Lead", icon: Users, href: "/dashboard/leads" },
-  PROPERTY: { label: "Property", icon: Building2, href: "/dashboard/properties" },
-};
-
-interface TaskItem {
-  id: string;
-  type: "SITE_VISIT" | "BOOKING" | "LEAD" | "PROPERTY";
-  title: string;
-  status: string;
-  date: string;
-}
+import { useState } from 'react';
+import { useMyTasks } from '@/hooks/api/useTasks';
+import { useCurrentUser } from '@/hooks/api/useCurrentUser';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
+import { CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import CreateTaskDialog from './create-task-dialog';
 
 export default function MyTasksPage() {
+  const router = useRouter();
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useMyTasks({ page, limit: 10 });
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
   const { data: currentUser } = useCurrentUser();
-  const employeeId = currentUser?.employee?.id || "";
+  const canCreateTask = currentUser?.user?.role && ['OWNER', 'ADMIN', 'MANAGER', 'TEAM_LEAD'].includes(currentUser.user.role);
 
-  const filter = useMemo(() => ({ assignedToEmployeeId: employeeId, limit: 100 }), [employeeId]);
-  const { data: svData } = useSiteVisits(employeeId ? filter : { limit: 1 });
-  const { data: bkData } = useBookings(employeeId ? filter : { limit: 1 });
-  const { data: leadData } = useLeads(employeeId ? filter : { limit: 1 });
-  const { data: propData } = useProperties(employeeId ? filter : { limit: 1 });
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'PENDING': return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>;
+      case 'IN_PROGRESS': return <Badge variant="default" className="bg-blue-500"><Clock className="w-3 h-3 mr-1" /> In Progress</Badge>;
+      case 'PENDING_VALIDATION': return <Badge variant="outline" className="text-orange-500 border-orange-500"><AlertCircle className="w-3 h-3 mr-1" /> In Review</Badge>;
+      case 'COMPLETED': return <Badge variant="default" className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" /> Completed</Badge>;
+      case 'OVERDUE': return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Overdue</Badge>;
+      default: return <Badge>{status}</Badge>;
+    }
+  };
 
-  const tasks = useMemo(() => {
-    const items: TaskItem[] = [];
-    (svData?.data || []).forEach((sv) => {
-      items.push({ id: sv.id, type: "SITE_VISIT", title: sv.property?.title || sv.propertyId, status: sv.status, date: sv.scheduledDate });
-    });
-    (bkData?.data || []).forEach((bk) => {
-      items.push({ id: bk.id, type: "BOOKING", title: `${bk.property?.title || bk.propertyId} - ${bk.customer?.name || bk.customerId}`, status: bk.status, date: bk.bookingDate });
-    });
-    (leadData?.data || []).forEach((l) => {
-      items.push({ id: l.id, type: "LEAD", title: l.customerName, status: l.status, date: l.createdAt });
-    });
-    (propData?.data || []).forEach((p) => {
-      items.push({ id: p.id, type: "PROPERTY", title: p.title, status: p.status, date: p.createdAt });
-    });
-    return items;
-  }, [svData, bkData, leadData, propData]);
-
-  const completed = tasks.filter(t => ["COMPLETED", "CONFIRMED", "CONVERTED", "SOLD"].includes(t.status)).length;
-  const pending = tasks.filter(t => ["SCHEDULED", "PENDING", "NEW", "AVAILABLE"].includes(t.status)).length;
-  const overdue = tasks.filter(t => {
-    if (t.status !== "SCHEDULED" && t.status !== "PENDING") return false;
-    const d = new Date(t.date);
-    return d < new Date();
-  }).length;
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'CRITICAL': return <Badge variant="destructive">Critical</Badge>;
+      case 'IMPORTANT': return <Badge variant="default" className="bg-orange-500">Important</Badge>;
+      case 'NORMAL': return <Badge variant="secondary">Normal</Badge>;
+      default: return <Badge>{priority}</Badge>;
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold">My Tasks</h2>
-        <p className="text-sm text-muted-foreground">Everything assigned to you</p>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">My Tasks</h1>
+          <p className="text-muted-foreground">Manage your assigned tasks and workflows.</p>
+        </div>
+        {canCreateTask && <Button onClick={() => setIsCreateOpen(true)}>Create Task</Button>}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card><CardContent className="p-4 flex items-center gap-3"><div className="p-2 rounded-lg bg-blue-500"><CheckCircle className="h-5 w-5 text-white" /></div><div><p className="text-2xl font-bold">{tasks.length}</p><p className="text-xs text-muted-foreground">Total Tasks</p></div></CardContent></Card>
-        <Card><CardContent className="p-4 flex items-center gap-3"><div className="p-2 rounded-lg bg-green-500"><CheckCircle className="h-5 w-5 text-white" /></div><div><p className="text-2xl font-bold">{completed}</p><p className="text-xs text-muted-foreground">Completed</p></div></CardContent></Card>
-        <Card><CardContent className="p-4 flex items-center gap-3"><div className="p-2 rounded-lg bg-yellow-500"><Clock className="h-5 w-5 text-white" /></div><div><p className="text-2xl font-bold">{pending}</p><p className="text-xs text-muted-foreground">Pending</p></div></CardContent></Card>
-        <Card><CardContent className="p-4 flex items-center gap-3"><div className="p-2 rounded-lg bg-red-500"><AlertCircle className="h-5 w-5 text-white" /></div><div><p className="text-2xl font-bold">{overdue}</p><p className="text-xs text-muted-foreground">Overdue</p></div></CardContent></Card>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle className="text-lg">All Tasks</CardTitle></CardHeader>
-        <CardContent>
-          {tasks.length === 0 ? (
-            <EmptyState icon={<ClipboardList className="h-12 w-12" />} title="No tasks assigned to you yet" description="Tasks assigned to you will appear here" />
-          ) : (
-            <div className="space-y-2">
-              {tasks.map((t) => {
-                const config = typeConfig[t.type];
-                const Icon = config.icon;
-                return (
-                  <Link key={`${t.type}-${t.id}`} href={config.href} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="p-1.5 rounded-md bg-muted"><Icon className="h-4 w-4" /></div>
-                      <div>
-                        <p className="text-sm font-medium">{t.title}</p>
-                        <p className="text-xs text-muted-foreground">{config.label} • {format(new Date(t.date), "MMM dd, yyyy")}</p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className={statusColors[t.status] || "bg-gray-100 text-gray-800"}>{t.status}</Badge>
-                  </Link>
-                );
-              })}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="hover:bg-muted/50 transition-colors">
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-3/4 mb-2" />
+                <Skeleton className="h-4 w-1/4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          data?.items?.length === 0 ? (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              No tasks assigned to you right now.
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ) : (
+            data?.items?.map((task: any) => (
+              <Card 
+                key={task.id} 
+                className="hover:shadow-md transition-all cursor-pointer border-l-4 border-l-primary"
+                onClick={() => router.push(`/dashboard/my-tasks/${task.id}`)}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start mb-2">
+                    {getStatusBadge(task.status)}
+                    {getPriorityBadge(task.priority)}
+                  </div>
+                  <CardTitle className="text-lg line-clamp-1">{task.title}</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Due: {format(new Date(task.dueDate), 'MMM dd, yyyy h:mm a')}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm line-clamp-2 text-muted-foreground">
+                    {task.description}
+                  </p>
+                  <div className="mt-4 flex justify-between items-center text-xs text-muted-foreground">
+                    <span>Category: {task.category.replace('_', ' ')}</span>
+                    <span>By: {task.creator?.firstName} {task.creator?.lastName}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )
+        )}
+      </div>
+
+      <CreateTaskDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
     </div>
   );
 }

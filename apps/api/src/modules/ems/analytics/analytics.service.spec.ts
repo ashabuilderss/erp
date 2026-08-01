@@ -20,6 +20,10 @@ describe('AnalyticsService', () => {
       findMany: jest.fn(),
       count: jest.fn(),
     },
+    attendanceDayAggregate: {
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
     leaveRequest: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -38,18 +42,23 @@ describe('AnalyticsService', () => {
       prisma.employee.findFirst.mockResolvedValue(null);
       const service = new AnalyticsService(prisma as never);
 
-      await expect(service.getEmployeeAnalytics('emp-1', 'c1')).rejects.toThrow('Employee not found');
+      await expect(service.getEmployeeAnalytics('emp-1', 'c1')).rejects.toThrow(
+        'Employee not found',
+      );
     });
 
     it('returns employee analytics with computed metrics', async () => {
       const prisma = mockPrisma();
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1', user: {} });
       prisma.employeeAssignment.findMany.mockResolvedValue([{ id: 'a1' }]);
-      prisma.performance.findMany.mockResolvedValue([{ score: 80 }, { score: 90 }]);
-      prisma.attendance.findMany.mockResolvedValue([
-        { status: 'PRESENT' },
-        { status: 'PRESENT' },
-        { status: 'ABSENT' },
+      prisma.performance.findMany.mockResolvedValue([
+        { score: 80 },
+        { score: 90 },
+      ]);
+      prisma.attendanceDayAggregate.findMany.mockResolvedValue([
+        { status: 'COMPLETED' },
+        { status: 'COMPLETED' },
+        { status: 'UNDER_REVIEW' },
       ]);
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.property.count.mockResolvedValue(3);
@@ -63,7 +72,11 @@ describe('AnalyticsService', () => {
       expect(result).toHaveProperty('employee');
       expect(result).toHaveProperty('assignments');
       expect(result).toHaveProperty('performance');
-      expect(result.attendance).toEqual({ totalDays: 3, presentDays: 2, attendanceRate: 67 });
+      expect(result.attendance).toEqual({
+        totalDays: 3,
+        presentDays: 2,
+        attendanceRate: 67,
+      });
       expect(result.metrics.propertiesAssigned).toBe(3);
       expect(result.metrics.leadsAssigned).toBe(10);
       expect(result.metrics.siteVisitsCompleted).toBe(5);
@@ -77,7 +90,7 @@ describe('AnalyticsService', () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1', user: {} });
       prisma.employeeAssignment.findMany.mockResolvedValue([]);
       prisma.performance.findMany.mockResolvedValue([]);
-      prisma.attendance.findMany.mockResolvedValue([]);
+      prisma.attendanceDayAggregate.findMany.mockResolvedValue([]);
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.property.count.mockResolvedValue(0);
       prisma.lead.count.mockResolvedValue(0);
@@ -87,7 +100,11 @@ describe('AnalyticsService', () => {
 
       const result = await service.getEmployeeAnalytics('emp-1', 'c1');
 
-      expect(result.attendance).toEqual({ totalDays: 0, presentDays: 0, attendanceRate: 0 });
+      expect(result.attendance).toEqual({
+        totalDays: 0,
+        presentDays: 0,
+        attendanceRate: 0,
+      });
     });
 
     it('correctly calculates conversionRate as 0 when no leads', async () => {
@@ -95,7 +112,7 @@ describe('AnalyticsService', () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1', user: {} });
       prisma.employeeAssignment.findMany.mockResolvedValue([]);
       prisma.performance.findMany.mockResolvedValue([]);
-      prisma.attendance.findMany.mockResolvedValue([]);
+      prisma.attendanceDayAggregate.findMany.mockResolvedValue([]);
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       prisma.property.count.mockResolvedValue(0);
       prisma.lead.count.mockResolvedValue(0);
@@ -113,12 +130,26 @@ describe('AnalyticsService', () => {
     it('returns team analytics summary', async () => {
       const prisma = mockPrisma();
       prisma.employee.findMany.mockResolvedValue([
-        { id: 'e1', user: { firstName: 'John', lastName: 'Doe' }, department: { name: 'Sales' } },
-        { id: 'e2', user: { firstName: 'Jane', lastName: 'Smith' }, department: { name: 'Sales' } },
+        {
+          id: 'e1',
+          user: { firstName: 'John', lastName: 'Doe' },
+          department: { name: 'Sales' },
+        },
+        {
+          id: 'e2',
+          user: { firstName: 'Jane', lastName: 'Smith' },
+          department: { name: 'Sales' },
+        },
       ]);
-      prisma.employeeAssignment.findMany.mockResolvedValue([{ id: 'a1', employeeId: 'e1' }, { id: 'a2', employeeId: 'e2' }]);
-      prisma.performance.findMany.mockResolvedValue([{ employeeId: 'e1', score: 80 }, { employeeId: 'e2', score: 90 }]);
-      prisma.attendance.findMany.mockResolvedValue([
+      prisma.employeeAssignment.findMany.mockResolvedValue([
+        { id: 'a1', employeeId: 'e1' },
+        { id: 'a2', employeeId: 'e2' },
+      ]);
+      prisma.performance.findMany.mockResolvedValue([
+        { employeeId: 'e1', score: 80 },
+        { employeeId: 'e2', score: 90 },
+      ]);
+      prisma.attendanceDayAggregate.findMany.mockResolvedValue([
         { status: 'PRESENT' },
         { status: 'PRESENT' },
         { status: 'ABSENT' },
@@ -138,27 +169,33 @@ describe('AnalyticsService', () => {
 
     it('filters employees by department when departmentId provided', async () => {
       const prisma = mockPrisma();
-      prisma.employee.findMany.mockResolvedValue([{ id: 'e1', user: { firstName: 'John', lastName: 'Doe' }, department: { name: 'Sales' } }]);
+      prisma.employee.findMany.mockResolvedValue([
+        {
+          id: 'e1',
+          user: { firstName: 'John', lastName: 'Doe' },
+          department: { name: 'Sales' },
+        },
+      ]);
       prisma.employeeAssignment.findMany.mockResolvedValue([]);
       prisma.performance.findMany.mockResolvedValue([]);
-      prisma.attendance.findMany.mockResolvedValue([]);
+      prisma.attendanceDayAggregate.findMany.mockResolvedValue([]);
       prisma.leaveRequest.findMany.mockResolvedValue([]);
       const service = new AnalyticsService(prisma as never);
 
       await service.getTeamAnalytics('c1', 'dept-1');
 
-      expect(prisma.employee.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ departmentId: 'dept-1' }),
-      }));
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ departmentId: 'dept-1' }),
+        }),
+      );
     });
   });
 
   describe('getConversionFunnel', () => {
     it('returns conversion funnel with rates', async () => {
       const prisma = mockPrisma();
-      prisma.lead.count
-        .mockResolvedValueOnce(100)
-        .mockResolvedValueOnce(20);
+      prisma.lead.count.mockResolvedValueOnce(100).mockResolvedValueOnce(20);
       prisma.siteVisit.count.mockResolvedValue(50);
       prisma.booking.count.mockResolvedValue(20);
       const service = new AnalyticsService(prisma as never);

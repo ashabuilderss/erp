@@ -14,7 +14,17 @@ export class PermissionGrantsService {
   async findAll(companyId: string) {
     return this.prisma.permissionGrant.findMany({
       where: { companyId },
-      include: { user: { select: { id: true, email: true, firstName: true, lastName: true, role: true } } },
+      include: {
+        usersPermissionGrantsUserIdTousers: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
     });
   }
 
@@ -57,7 +67,13 @@ export class PermissionGrantsService {
     await this.prisma.$transaction(
       dto.grants.map((g) =>
         this.prisma.permissionGrant.upsert({
-          where: { companyId_userId_permission: { companyId, userId, permission: g.permission } },
+          where: {
+            companyId_userId_permission: {
+              companyId,
+              userId,
+              permission: g.permission,
+            },
+          },
           update: { granted: g.granted, grantedById: currentUserId },
           create: {
             userId,

@@ -1,8 +1,14 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { TwoFactorService } from './two-factor.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/roles.decorator';
+import {
+  VerifyTwoFactorDto,
+  DisableTwoFactorDto,
+  AuthenticateTwoFactorDto,
+} from './dto/two-factor.dto';
 
 interface RequestUser {
   id: string;
@@ -25,18 +31,18 @@ export class TwoFactorController {
   @UseGuards(JwtAuthGuard)
   async verify(
     @CurrentUser() user: RequestUser,
-    @Body() body: { token: string },
+    @Body() dto: VerifyTwoFactorDto,
   ) {
-    return this.twoFactorService.verify(user.id, body.token);
+    return this.twoFactorService.verify(user.id, dto.token);
   }
 
   @Post('disable')
   @UseGuards(JwtAuthGuard)
   async disable(
     @CurrentUser() user: RequestUser,
-    @Body() body: { password: string },
+    @Body() dto: DisableTwoFactorDto,
   ) {
-    return this.twoFactorService.disable(user.id, body.password);
+    return this.twoFactorService.disable(user.id, dto.password);
   }
 
   @Post('backup-codes')
@@ -47,7 +53,8 @@ export class TwoFactorController {
 
   @Post('authenticate')
   @Public()
-  async authenticate(@Body() body: { tempToken: string; code: string }) {
-    return this.twoFactorService.authenticate(body.tempToken, body.code);
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async authenticate(@Body() dto: AuthenticateTwoFactorDto) {
+    return this.twoFactorService.authenticate(dto.tempToken, dto.code);
   }
 }

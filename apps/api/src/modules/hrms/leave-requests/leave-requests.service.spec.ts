@@ -3,14 +3,14 @@ import { LeaveRequestsService } from './leave-requests.service';
 
 describe('LeaveRequestsService approval', () => {
   it('consumes the allocation matching the requested leave type', async () => {
-    const prisma = {
+    const prisma: any = {
       leaveRequest: {
         findFirst: jest.fn().mockResolvedValue({
           id: 'leave-1',
           companyId: 'company-1',
           employeeId: 'employee-1',
           status: LeaveStatus.PENDING,
-          type: LeaveType.CASUAL,
+          type: LeaveType.MEDICAL,
           startDate: new Date('2026-06-22'),
           endDate: new Date('2026-06-23'),
         }),
@@ -25,12 +25,16 @@ describe('LeaveRequestsService approval', () => {
       leaveAllocation: {
         upsert: jest.fn().mockResolvedValue({}),
       },
-      $transaction: jest.fn(async (fn: (tx: any) => Promise<unknown>) => fn(prisma as never)),
+      $transaction: jest.fn(
+        async (fn: (tx: any) => Promise<unknown>): Promise<unknown> =>
+          fn(prisma),
+      ),
     };
     const service = new LeaveRequestsService(
       prisma as never,
       { emit: jest.fn() } as never,
       { validate: jest.fn(), execute: jest.fn() } as never,
+      { findBasicById: jest.fn().mockResolvedValue({ id: 'employee-1' }), findByUserId: jest.fn().mockResolvedValue({ id: 'approver-employee' }) } as never,
     );
 
     await service.approve(
@@ -38,14 +42,14 @@ describe('LeaveRequestsService approval', () => {
       { status: LeaveStatus.APPROVED },
       'approver-user',
       'company-1',
-      UserRole.ADMIN,
+      UserRole.OWNER,
     );
 
     expect(prisma.leaveAllocation.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           employeeId_companyId_year_leaveType: expect.objectContaining({
-            leaveType: LeaveType.CASUAL,
+            leaveType: LeaveType.MEDICAL,
           }),
         },
       }),

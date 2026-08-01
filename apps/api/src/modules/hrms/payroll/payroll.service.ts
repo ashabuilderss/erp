@@ -2,15 +2,27 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../../config/prisma.service';
 import { Prisma, PayrollRunStatus } from '@prisma/client';
 import { CreatePayrollRunDto } from './dto/create-payroll-run.dto';
 import { QueryPayrollRunDto } from './dto/query-payroll-run.dto';
+import { GovernanceEventPublisher } from '../../governance-events/governance-event.publisher';
+import { DomainEventTypes } from '../../governance-events/types/events';
+import { EmployeesService } from '../employees/employees.service';
+import { TransitionService } from '../../../common/services/transition.service';
 
 @Injectable()
 export class PayrollService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PayrollService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventPublisher: GovernanceEventPublisher,
+    private readonly employeesService: EmployeesService,
+    private readonly transitionService: TransitionService,
+  ) {}
 
   async createRun(dto: CreatePayrollRunDto, companyId: string) {
     const periodStart = new Date(dto.periodStart);
@@ -43,8 +55,8 @@ export class PayrollService {
       take: query.limit ?? 10,
       orderBy: { periodStart: 'desc' },
       include: {
-        processedBy: {
-          include: { user: { select: { firstName: true, lastName: true } } },
+        employees: {
+          include: { users: { select: { firstName: true, lastName: true } } },
         },
         _count: { select: { payslips: true } },
       },
@@ -64,14 +76,14 @@ export class PayrollService {
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, companyId },
       include: {
-        processedBy: {
-          include: { user: { select: { firstName: true, lastName: true } } },
+        employees: {
+          include: { users: { select: { firstName: true, lastName: true } } },
         },
         payslips: {
           include: {
-            employee: {
+            employees: {
               include: {
-                user: { select: { firstName: true, lastName: true } },
+                users: { select: { firstName: true, lastName: true } },
               },
             },
           },
@@ -96,8 +108,10 @@ export class PayrollService {
       select: { settings: true },
     });
     const settings = (company?.settings as Record<string, unknown>) ?? {};
-    const weeklyOffDays = (settings.weeklyOffDays as string[]) ?? ['SUNDAY'];
-    const components = (settings.payrollComponents as Record<string, boolean>) ?? { pf: true, tds: true };
+    const components = (settings.payrollComponents as Record<
+      string,
+      boolean
+    >) ?? { pf: true, tds: true };
 
     const periodStart = new Date(run.periodStart);
     const periodEnd = new Date(run.periodEnd);
@@ -106,20 +120,7 @@ export class PayrollService {
         (periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24),
       ) + 1;
 
-    const weeklyOffDates = new Set<string>();
-    for (let i = 0; i < calendarDays; i++) {
-      const d = new Date(periodStart);
-      d.setDate(d.getDate() + i);
-      const dayName = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][d.getDay()];
-      if (weeklyOffDays.includes(dayName)) {
-        weeklyOffDates.add(d.toISOString().slice(0, 10));
-      }
-    }
-
-    const activeEmployees = await this.prisma.employee.findMany({
-      where: { companyId, status: 'ACTIVE' },
-      select: { id: true, salary: true, dateOfJoining: true },
-    });
+    const activeEmployees = await this.employeesService.findActiveForPayroll(companyId);
 
     if (activeEmployees.length === 0) {
       throw new BadRequestException(
@@ -127,83 +128,155 @@ export class PayrollService {
       );
     }
 
-    const attendanceRecords = await this.prisma.attendance.findMany({
+    const activeHolds = await this.prisma.payrollHold.findMany({
       where: {
-        employeeId: { in: activeEmployees.map((e) => e.id) },
-        date: { gte: periodStart, lte: periodEnd },
         companyId,
+        status: { in: ['REQUESTED', 'UNDER_REVIEW', 'ACTIVE_HOLD'] },
       },
-      select: { employeeId: true, date: true, status: true },
+      select: { employeeId: true },
     });
-    const approvedLeaves = await this.prisma.leaveRequest.findMany({
+    const heldEmployeeIds = new Set(activeHolds.map((h) => h.employeeId));
+    const eligibleEmployees = activeEmployees.filter(
+      (e) => !heldEmployeeIds.has(e.id),
+    );
+
+    if (heldEmployeeIds.size > 0) {
+      const heldDetails = await this.prisma.payrollHold.findMany({
+        where: {
+          companyId,
+          employeeId: { in: [...heldEmployeeIds] },
+          status: { in: ['REQUESTED', 'UNDER_REVIEW', 'ACTIVE_HOLD'] },
+        },
+        include: {
+          employeesPayrollHoldsEmployeeIdToemployees: {
+            select: { id: true, employeeCode: true },
+          },
+        },
+      });
+
+      const ownerUsers = await this.prisma.user.findMany({
+        where: { companyId, role: 'OWNER' },
+        select: { id: true },
+      });
+      const hrUsers = await this.prisma.user.findMany({
+        where: { companyId, role: 'HR_MANAGER' },
+        select: { id: true },
+      });
+      const notifyUserIds = [...new Set([...ownerUsers.map((u) => u.id), ...hrUsers.map((u) => u.id)])];
+
+      for (const hold of heldDetails) {
+        const empName = hold.employeesPayrollHoldsEmployeeIdToemployees?.employeeCode ?? hold.employeeId;
+        for (const userId of notifyUserIds) {
+          await this.prisma.notification.create({
+            data: {
+              userId,
+              companyId,
+              title: 'Payroll Hold - Employee Excluded',
+              message: `Employee ${empName} (${hold.employeeId}) is excluded from payroll run due to active hold (${hold.holdType}). Reason: ${hold.reason || 'Not specified'}.`,
+              type: 'PAYROLL_HOLD_NOTIFICATION',
+              link: `/payroll/holds/${hold.id}`,
+            },
+          });
+        }
+      }
+    }
+
+    if (eligibleEmployees.length === 0) {
+      throw new BadRequestException(
+        'All active employees are under payroll hold. Release holds before processing.',
+      );
+    }
+
+    const attendanceSnapshots =
+      await this.prisma.payrollAttendanceSnapshot.findMany({
+        where: {
+          employeeId: { in: eligibleEmployees.map((e) => e.id) },
+          companyId,
+          attendancePeriods: {
+            startDate: { gte: periodStart },
+            endDate: { lte: periodEnd },
+          },
+        },
+        select: { employeeId: true, snapshotData: true },
+      });
+    const snapshotMap = new Map(
+      attendanceSnapshots.map((snapshot) => [snapshot.employeeId, snapshot]),
+    );
+
+    const employeeIds = eligibleEmployees.map((e) => e.id);
+    const approvedCommissions = await this.prisma.pipelineCommission.findMany({
       where: {
-        employeeId: { in: activeEmployees.map((e) => e.id) },
         companyId,
+        employeeId: { in: employeeIds },
         status: 'APPROVED',
-        startDate: { lte: periodEnd },
-        endDate: { gte: periodStart },
+        createdAt: { gte: periodStart, lte: periodEnd },
       },
-      select: { employeeId: true, startDate: true, endDate: true },
+      select: { employeeId: true, amount: true },
     });
+    const commissionByEmployee = new Map<string, number>();
+    for (const c of approvedCommissions) {
+      commissionByEmployee.set(
+        c.employeeId,
+        (commissionByEmployee.get(c.employeeId) ?? 0) + Number(c.amount),
+      );
+    }
 
-
-    const attendanceMap = new Map<string, Set<string>>();
-    const halfDayMap = new Map<string, Set<string>>();
-    for (const rec of attendanceRecords) {
-      if (!attendanceMap.has(rec.employeeId)) {
-        attendanceMap.set(rec.employeeId, new Set());
-        halfDayMap.set(rec.employeeId, new Set());
-      }
-      if (rec.status === 'PRESENT') {
-        attendanceMap.get(rec.employeeId)!.add(rec.date.toISOString().slice(0, 10));
-      } else if (rec.status === 'HALF_DAY') {
-        halfDayMap.get(rec.employeeId)!.add(rec.date.toISOString().slice(0, 10));
+    const approvedIncentives = await this.prisma.incentive.findMany({
+      where: {
+        companyId,
+        winnerId: { in: employeeIds },
+        status: 'CLOSED',
+        createdAt: { gte: periodStart, lte: periodEnd },
+      },
+      select: { winnerId: true, value: true, title: true },
+    });
+    const incentiveByEmployee = new Map<string, number>();
+    for (const inc of approvedIncentives) {
+      if (inc.winnerId && inc.value) {
+        incentiveByEmployee.set(
+          inc.winnerId,
+          (incentiveByEmployee.get(inc.winnerId) ?? 0) + Number(inc.value),
+        );
       }
     }
 
-    const leaveDateMap = new Map<string, Set<string>>();
-    for (const leave of approvedLeaves) {
-      const dates = leaveDateMap.get(leave.employeeId) ?? new Set<string>();
-      const start = new Date(Math.max(leave.startDate.getTime(), periodStart.getTime()));
-      const end = new Date(Math.min(leave.endDate.getTime(), periodEnd.getTime()));
-      for (
-        const date = new Date(start);
-        date <= end;
-        date.setDate(date.getDate() + 1)
-      ) {
-        dates.add(date.toISOString().slice(0, 10));
-      }
-      leaveDateMap.set(leave.employeeId, dates);
-    }
-
-    const payslipData = activeEmployees.map((emp) => {
+    const payslipData = eligibleEmployees.map((emp) => {
       const monthlySalary = emp.salary ? Number(emp.salary) : 0;
       const dailyRate = monthlySalary / 30;
 
-      const presentDates = attendanceMap.get(emp.id);
-      const halfDayDates = halfDayMap.get(emp.id);
-      const presentDays = presentDates?.size ?? 0;
-      const halfDays = halfDayDates?.size ?? 0;
-
-      const leaveDates = leaveDateMap.get(emp.id) ?? new Set<string>();
-      const paidWeeklyOffDays = [...weeklyOffDates].filter(
-        (date) => !presentDates?.has(date) && !halfDayDates?.has(date),
-      ).length;
-      const paidLeaveDays = [...leaveDates].filter(
-        (date) =>
-          !presentDates?.has(date) &&
-          !halfDayDates?.has(date) &&
-          !weeklyOffDates.has(date),
-      ).length;
+      const snapshot = snapshotMap.get(emp.id);
+      const snapshotData =
+        (snapshot?.snapshotData as Record<string, unknown>) ?? {};
       const effectivePresentDays = Math.min(
         calendarDays,
-        presentDays + halfDays * 0.5 + paidWeeklyOffDays + paidLeaveDays,
+        Number(snapshotData.paidDays ?? 0),
       );
       const grossPay = Math.round(dailyRate * effectivePresentDays * 100) / 100;
 
       const earnings: { name: string; amount: number }[] = [
-        { name: 'Basic (30-day rate)', amount: Math.round(dailyRate * effectivePresentDays * 100) / 100 },
+        {
+          name: 'Basic (30-day rate)',
+          amount: Math.round(dailyRate * effectivePresentDays * 100) / 100,
+        },
       ];
+
+      const commissionIncentive = commissionByEmployee.get(emp.id) ?? 0;
+      if (commissionIncentive > 0) {
+        earnings.push({
+          name: 'Commission Incentive',
+          amount: Math.round(commissionIncentive * 100) / 100,
+        });
+      }
+
+      const performanceIncentive = incentiveByEmployee.get(emp.id) ?? 0;
+      if (performanceIncentive > 0) {
+        earnings.push({
+          name: 'Performance Incentive',
+          amount: Math.round(performanceIncentive * 100) / 100,
+        });
+      }
+
+      const totalGross = earnings.reduce((s, e) => s + e.amount, 0);
 
       const deductions: { name: string; amount: number }[] = [];
       let totalDed = 0;
@@ -214,12 +287,12 @@ export class PayrollService {
         totalDed += pf;
       }
       if (components.tds) {
-        const tax = Math.round(grossPay * 0.05 * 100) / 100;
+        const tax = Math.round(totalGross * 0.05 * 100) / 100;
         deductions.push({ name: 'TDS', amount: tax });
         totalDed += tax;
       }
 
-      const netPay = Math.round((grossPay - totalDed) * 100) / 100;
+      const netPay = Math.round((totalGross - totalDed) * 100) / 100;
 
       return {
         employeeId: emp.id,
@@ -227,7 +300,7 @@ export class PayrollService {
         basicSalary: monthlySalary,
         earnings,
         deductions,
-        grossPay,
+        grossPay: totalGross,
         totalDeductions: totalDed,
         netPay,
         status: 'DRAFT' as const,
@@ -265,6 +338,21 @@ export class PayrollService {
           employeeCount: payslipData.length,
         },
       });
+
+      await this.eventPublisher.publish(tx, {
+        eventType: DomainEventTypes.PAYROLL_PROCESSED,
+        entityId: id,
+        entityType: 'PayrollRun',
+        companyId,
+        payload: {
+          companyId,
+          payrollRunId: id,
+          processedById,
+          employeeCount: payslipData.length,
+          totalNetPay: Math.round(totalNetPay * 100) / 100,
+          heldEmployeeCount: heldEmployeeIds.size,
+        },
+      });
     });
 
     return this.findOneRun(id, companyId);
@@ -278,16 +366,57 @@ export class PayrollService {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.payslip.updateMany({
-        where: { payrollRunId: id },
-        data: { status: 'PAID', paidAt: new Date() },
+    this.transitionService.validate('PayrollRun', run.status, 'PAID');
+
+    if (!run.processedById) {
+      throw new BadRequestException(
+        'Payroll run has no processing record. Process the run before marking paid.',
+      );
+    }
+
+    const payslips = await this.prisma.payslip.findMany({
+      where: { payrollRunId: id },
+      select: { id: true, employeeId: true },
+    });
+
+    const employeeIds = payslips.map((p) => p.employeeId);
+    const heldEmployeeIds = new Set<string>();
+    if (employeeIds.length > 0) {
+      const activeHolds = await this.prisma.payrollHold.findMany({
+        where: {
+          companyId,
+          employeeId: { in: employeeIds },
+          status: { in: ['REQUESTED', 'UNDER_REVIEW', 'ACTIVE_HOLD'] },
+        },
+        select: { employeeId: true, reason: true },
       });
+      for (const hold of activeHolds) {
+        heldEmployeeIds.add(hold.employeeId);
+      }
+    }
+
+    const clearPayslipIds = payslips
+      .filter((p) => !heldEmployeeIds.has(p.employeeId))
+      .map((p) => p.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (clearPayslipIds.length > 0) {
+        await tx.payslip.updateMany({
+          where: { id: { in: clearPayslipIds } },
+          data: { status: 'PAID', paidAt: new Date() },
+        });
+      }
       await tx.payrollRun.update({
         where: { id },
         data: { status: PayrollRunStatus.PAID },
       });
     });
+
+    if (heldEmployeeIds.size > 0) {
+      this.logger.warn(
+        `Payroll run ${id} marked PAID, but ${heldEmployeeIds.size} employee(s) skipped due to active holds`,
+      );
+    }
 
     return this.findOneRun(id, companyId);
   }
@@ -303,6 +432,8 @@ export class PayrollService {
       );
     }
 
+    this.transitionService.validate('PayrollRun', run.status, 'CANCELLED');
+
     await this.prisma.$transaction(async (tx) => {
       await tx.payslip.deleteMany({ where: { payrollRunId: id } });
       await tx.payrollRun.update({
@@ -314,11 +445,11 @@ export class PayrollService {
     return this.findOneRun(id, companyId);
   }
 
-  async findMyPayslips(employeeId: string) {
+  async findMyPayslips(employeeId: string, companyId: string) {
     return this.prisma.payslip.findMany({
-      where: { employeeId },
+      where: { employeeId, companyId },
       include: {
-        payrollRun: {
+        payrollRuns: {
           select: { periodStart: true, periodEnd: true, status: true },
         },
       },
@@ -330,10 +461,10 @@ export class PayrollService {
     const payslip = await this.prisma.payslip.findFirst({
       where: { id, companyId },
       include: {
-        employee: {
-          include: { user: { select: { firstName: true, lastName: true } } },
+        employees: {
+          include: { users: { select: { firstName: true, lastName: true } } },
         },
-        payrollRun: {
+        payrollRuns: {
           select: { periodStart: true, periodEnd: true, status: true },
         },
       },

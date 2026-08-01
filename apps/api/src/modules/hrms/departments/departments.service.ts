@@ -75,7 +75,7 @@ export class DepartmentsService {
       where: { id, companyId },
       include: {
         designations: true,
-        employees: { include: { user: true, designation: true } },
+        employees: { include: { users: true, designations: true } },
         _count: { select: { employees: true } },
       },
     });
@@ -103,7 +103,7 @@ export class DepartmentsService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.department.delete({ where: { id } });
+    await this.prisma.department.update({ where: { id }, data: { deletedAt: new Date() } });
     this.eventEmitter.emit('department.deleted', { companyId, entityId: id });
   }
 }

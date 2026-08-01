@@ -6,6 +6,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './config/prisma.module';
 import { RedisModule } from './config/redis.module';
 import { LoggerModule } from './common/logger/logger.module';
+import { RbacModule } from './common/rbac/rbac.module';
 import { CommonServicesModule } from './common/services/common-services.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
@@ -15,11 +16,12 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { TwoFactorEnforcedGuard } from './common/guards/two-factor-enforced.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { HrmsModule } from './modules/hrms/hrms.module';
 import { ConstructionModule } from './modules/construction/construction.module';
-import { PortalsModule } from './modules/portals/portals.module';
+
 import { EmsModule } from './modules/ems/ems.module';
 import { UsersModule } from './modules/users/users.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -34,9 +36,27 @@ import { PermissionGrantsModule } from './modules/permission-grants/permission-g
 import { SecurityEventsModule } from './modules/security-events/security-events.module';
 import { CommissionModule } from './modules/commission/commission.module';
 import { IncentivesModule } from './modules/incentives/incentives.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { TasksModule } from './modules/tasks/tasks.module';
+import { WarningsModule } from './modules/warnings/warnings.module';
+import { PayrollHoldsModule } from './modules/payroll-holds/payroll-holds.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
-import { DealersModule } from './modules/dealers/dealers.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { GovernanceEventsModule } from './modules/governance-events/governance-events.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { PerformanceScoreModule } from './modules/performance/performance.module';
+import { CommunicationModule } from './modules/communication/communication.module';
+import { RealtimeModule } from './common/realtime/realtime.module';
+import { AgreementsModule } from './modules/agreements/agreements.module';
+import { ProjectProfitabilityModule } from './modules/project-profitability/project-profitability.module';
+import { RecruitmentModule } from './modules/recruitment/recruitment.module';
+import { TrainingModule } from './modules/training/training.module';
+import { AssetsModule } from './modules/assets/assets.module';
+import { MeetingsModule } from './modules/meetings/meetings.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { PortalsModule } from './modules/portals/portals.module';
 
 @Module({
   imports: [
@@ -44,14 +64,17 @@ import { ReportsModule } from './modules/reports/reports.module';
     CommonServicesModule,
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    ThrottlerModule.forRoot([
+      { ttl: 60000, limit: Number(process.env.THROTTLE_LIMIT ?? 100) },
+    ]),
     PrismaModule,
     RedisModule,
+    RbacModule,
     AuthModule,
     CrmModule,
     HrmsModule,
     ConstructionModule,
-    PortalsModule,
+
     EmsModule,
     UsersModule,
     NotificationsModule,
@@ -65,10 +88,28 @@ import { ReportsModule } from './modules/reports/reports.module';
     SecurityEventsModule,
     CommissionModule,
     IncentivesModule,
+    ScheduleModule.forRoot(),
+    ApprovalsModule,
+    TasksModule,
+    WarningsModule,
+    PayrollHoldsModule,
     SchedulerModule,
-    DealersModule,
     ReportsModule,
     EventsModule,
+    GovernanceEventsModule,
+    DashboardModule,
+    AuditModule,
+    PerformanceScoreModule,
+    CommunicationModule,
+    RealtimeModule,
+    AgreementsModule,
+    ProjectProfitabilityModule,
+    RecruitmentModule,
+    TrainingModule,
+    AssetsModule,
+    MeetingsModule,
+    InventoryModule,
+    PortalsModule,
   ],
   providers: [
     {
@@ -86,6 +127,11 @@ import { ReportsModule } from './modules/reports/reports.module';
     {
       provide: APP_GUARD,
       useClass: PermissionsGuard,
+    },
+    // §5.29: enforce 2FA for OWNER / ADMIN / ACCOUNTS on @Require2FA() routes
+    {
+      provide: APP_GUARD,
+      useClass: TwoFactorEnforcedGuard,
     },
     {
       provide: APP_GUARD,

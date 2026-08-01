@@ -14,6 +14,8 @@ import {
   UpdatePaymentScheduleDto,
 } from './dto/create-payment-schedule.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Permissions } from '../../common/auth/permissions';
 import {
   CurrentCompany,
   CurrentUser,
@@ -25,7 +27,8 @@ export class PaymentSchedulesController {
   constructor(private readonly service: PaymentSchedulesService) {}
 
   @Get('booking/:bookingId')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_READ)
   async findByBooking(
     @Param('bookingId') bookingId: string,
     @CurrentCompany('id') companyId: string,
@@ -34,7 +37,8 @@ export class PaymentSchedulesController {
   }
 
   @Post('booking/:bookingId')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_CREATE)
   async create(
     @Param('bookingId') bookingId: string,
     @Body() dto: CreatePaymentScheduleDto,
@@ -44,7 +48,8 @@ export class PaymentSchedulesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_CREATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdatePaymentScheduleDto,
@@ -54,7 +59,8 @@ export class PaymentSchedulesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_CREATE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

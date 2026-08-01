@@ -13,6 +13,7 @@ const webServerCommand =
   process.env.WEB_E2E_WEB_SERVER_COMMAND ?? defaultWebServerCommand;
 
 export default defineConfig({
+  globalSetup: "./e2e/global-setup.ts",
   testDir: "./e2e",
   timeout: 60_000,
   expect: {

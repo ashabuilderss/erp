@@ -10,8 +10,14 @@ describe('AuthService effective permissions', () => {
         ]),
       },
     };
-    const service = new AuthService(prisma as never, {} as never, {} as never, {} as never, {} as never);
-    const result = await service.getEffectivePermissions('user-1', 'EMPLOYEE' as never);
+    const service = new AuthService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const result = await service.getEffectivePermissions('user-1', 'EMPLOYEE');
     expect(result).not.toContain('lead:read');
     expect(result).toContain('booking:update');
   });

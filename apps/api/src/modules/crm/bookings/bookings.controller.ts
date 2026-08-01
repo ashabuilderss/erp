@@ -24,110 +24,157 @@ import { UserRole } from '@prisma/client';
 import { CacheInvalidateExtra } from '../../../common/decorators/cache.decorators';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Permissions } from '../../../common/auth/permissions';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
+import { getEffectiveScopeFilter } from '../../../common/utils/scope-helper.util';
 
 @Controller('bookings')
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.BOOKING_CREATE)
-  @CacheInvalidateExtra(['bookings', 'properties'])
+  @CacheInvalidateExtra(['bookings', 'properties', 'commissions'])
   async create(
     @Body() dto: CreateBookingDto,
     @CurrentCompany('id') companyId: string,
     @CurrentUser('role') role: string,
     @CurrentEmployeeId() employeeId: string | null,
   ) {
-    return this.bookingsService.create(dto, companyId, role, employeeId ?? undefined);
+    return this.bookingsService.create(
+      dto,
+      companyId,
+      role,
+      employeeId ?? undefined,
+    );
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.BOOKING_READ)
   async findAll(
     @Query() query: QueryBookingDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
-    @CurrentUser('role') role: string,
+    @CurrentUser('scopes') scopes: Record<string, string>,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.bookingsService.findAll(
-      query,
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.BOOKING_READ, {
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
-    );
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.bookingsService.findAll(query, scopeFilter);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.BOOKING_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
-    @CurrentUser('role') role: string,
+    @CurrentUser('scopes') scopes: Record<string, string>,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.bookingsService.findOne(id, companyId, role === 'EMPLOYEE' ? employeeId! : undefined);
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.BOOKING_READ, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.bookingsService.findOne(id, scopeFilter);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.BOOKING_UPDATE)
-  @CacheInvalidateExtra(['bookings', 'properties'])
+  @CacheInvalidateExtra(['bookings', 'properties', 'commissions'])
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateBookingDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
+    @CurrentUser('scopes') scopes: Record<string, string>,
     @CurrentUser('role') role: string,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.BOOKING_UPDATE, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
     return this.bookingsService.update(
       id,
       dto,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      scopeFilter,
       role,
       employeeId ?? undefined,
     );
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.BOOKING_UPDATE)
-  @CacheInvalidateExtra(['bookings', 'properties'])
+  @CacheInvalidateExtra(['bookings', 'properties', 'commissions'])
   async updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateBookingStatusDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
+    @CurrentUser('scopes') scopes: Record<string, string>,
     @CurrentUser('role') role: string,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.BOOKING_UPDATE, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
     return this.bookingsService.updateStatus(
       id,
       dto.status,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      scopeFilter,
       role,
       employeeId ?? undefined,
     );
   }
 
   @Patch(':id/payment-status')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.BOOKING_UPDATE)
-  @CacheInvalidateExtra(['bookings', 'properties'])
+  @CacheInvalidateExtra(['bookings', 'properties', 'commissions'])
   async updatePaymentStatus(
     @Param('id') id: string,
     @Body() dto: UpdateBookingPaymentStatusDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
+    @CurrentUser('scopes') scopes: Record<string, string>,
     @CurrentUser('role') role: string,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.BOOKING_UPDATE, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
     return this.bookingsService.updatePaymentStatus(
       id,
       dto.paymentStatus,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      scopeFilter,
       role,
       employeeId ?? undefined,
     );

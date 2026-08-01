@@ -29,6 +29,7 @@ export function EmployeeDashboard() {
   const todayStr = myAttendanceRes?.today ?? new Date().toISOString().slice(0, 10);
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
+
   const [gpsLoading, setGpsLoading] = useState(false);
 
   const todayRecord = myAttendance?.find((a) => {
@@ -51,7 +52,13 @@ export function EmployeeDashboard() {
   const handleCheckIn = useCallback(async () => {
     setGpsLoading(true);
     const coords = await getPosition();
-    checkIn.mutate(coords ?? undefined, {
+    if (!coords) {
+      showToast("Location unavailable. Check-in will proceed without GPS.", "error");
+    }
+    checkIn.mutate({
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    }, {
       onSuccess: () => showToast("Checked in successfully"),
       onError: (err: unknown) => showToast(getApiErrorMessage(err, "Check-in failed"), "error"),
       onSettled: () => setGpsLoading(false),
@@ -61,7 +68,13 @@ export function EmployeeDashboard() {
   const handleCheckOut = useCallback(async () => {
     setGpsLoading(true);
     const coords = await getPosition();
-    checkOut.mutate(coords ?? undefined, {
+    if (!coords) {
+      showToast("Location unavailable. Check-out will proceed without GPS.", "error");
+    }
+    checkOut.mutate({
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    }, {
       onSuccess: () => showToast("Checked out successfully"),
       onError: (err: unknown) => showToast(getApiErrorMessage(err, "Check-out failed"), "error"),
       onSettled: () => setGpsLoading(false),
@@ -85,8 +98,8 @@ export function EmployeeDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <KPICard
           label="My Attendance"
-          value={myAttendance.length > 0 ? `${Math.round((myAttendance.filter(a => a.status === "PRESENT").length / myAttendance.length) * 100)}%` : "-"}
-          sub={`${myAttendance.filter(a => a.status === "PRESENT").length}/${myAttendance.length} days`}
+          value={myAttendance.length > 0 ? `${Math.round((myAttendance.filter(a => a.status === "COMPLETED").length / myAttendance.length) * 100)}%` : "-"}
+          sub={`${myAttendance.filter(a => a.status === "COMPLETED").length}/${myAttendance.length} days`}
           icon={<CalendarCheck className="h-5 w-5 text-white" />}
           color="bg-blue-500"
         />
@@ -103,7 +116,7 @@ export function EmployeeDashboard() {
           <div className="flex items-center gap-4">
             {todayRecord?.checkIn && <p className="text-sm text-muted-foreground">Check-in: <span className="font-medium text-foreground">{format(new Date(todayRecord.checkIn), "HH:mm")}</span></p>}
             {todayRecord?.checkOut && <p className="text-sm text-muted-foreground">Check-out: <span className="font-medium text-foreground">{format(new Date(todayRecord.checkOut), "HH:mm")}</span></p>}
-            {todayRecord?.status && <Badge variant="outline" className={todayRecord.status === "PRESENT" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>{todayRecord.status}</Badge>}
+            {todayRecord?.status && <Badge variant="outline" className={todayRecord.status === "COMPLETED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>{todayRecord.status}</Badge>}
             {(todayRecord as any)?.latitude && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
@@ -160,7 +173,7 @@ export function EmployeeDashboard() {
                 {myAttendance.slice(0, 5).map((a) => (
                   <div key={a.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
                     <p className="text-sm">{format(new Date(a.date), "MMM dd")}</p>
-                    <Badge variant="outline" className={a.status === "PRESENT" ? "bg-green-100 text-green-800" : a.status === "ABSENT" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"}>{a.status}</Badge>
+                    <Badge variant="outline" className={a.status === "COMPLETED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>{a.status}</Badge>
                   </div>
                 ))}
               </div>

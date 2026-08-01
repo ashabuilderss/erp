@@ -41,7 +41,9 @@ export class ActivityLogsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          performedBy: { include: { user: true } },
+          employees: {
+            include: { users: { select: { firstName: true, lastName: true } } },
+          },
         },
       }),
       this.prisma.activityLog.count({ where }),
@@ -74,7 +76,7 @@ export class ActivityLogsService {
     return this.prisma.activityLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { performedBy: { include: { user: true } } },
+      include: { employees: { include: { users: true } } },
     });
   }
 }

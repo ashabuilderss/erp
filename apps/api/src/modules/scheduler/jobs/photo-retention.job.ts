@@ -36,7 +36,9 @@ export class PhotoRetentionJob {
         await this.prisma.progressPhoto.deleteMany({
           where: { id: { in: old.map((p) => p.id) } },
         });
-        this.logger.log(`Deleted ${old.length} progress photos older than ${retentionDays} days`);
+        this.logger.log(
+          `Deleted ${old.length} progress photos older than ${retentionDays} days`,
+        );
       }
     }
   }

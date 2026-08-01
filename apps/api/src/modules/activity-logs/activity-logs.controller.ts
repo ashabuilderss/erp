@@ -42,11 +42,12 @@ export class ActivityLogsController {
       return res.json(data);
     }
 
-    const header = 'Time,Action,Entity,Entity ID,Description,Performed By,Actor Email,Actor Role,IP Address,Request ID';
+    const header =
+      'Time,Action,Entity,Entity ID,Description,Performed By,Actor Email,Actor Role,IP Address,Request ID';
     const rows = data.map((log) => {
-      const performedByName = log.performedBy?.user
-        ? `${log.performedBy.user.firstName} ${log.performedBy.user.lastName}`
-        : log.performedBy?.employeeCode || '';
+      const performedByName = log.employees?.users
+        ? `${log.employees.users.firstName} ${log.employees.users.lastName}`
+        : log.employees?.employeeCode || '';
       return [
         log.createdAt.toISOString(),
         `"${log.action.replace(/"/g, '""')}"`,

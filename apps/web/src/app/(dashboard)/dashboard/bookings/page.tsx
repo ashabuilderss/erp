@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { useBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useProperties, useCustomers, useEmployees, useLeads } from "@/hooks/api";
+import { useBookings, useCreateBooking, useUpdateBooking, useDeleteBooking, useProperties, useCustomers, useEmployees, useLeads, useCurrentUser } from "@/hooks/api";
 import { useToast } from "@/components/ui/toast";
 import { getApiErrorMessage } from "@/lib/api";
 import type { Booking, BookingStatus, CreateBookingDto, PaymentStatus, UpdateBookingDto } from "@/lib/types";
@@ -48,6 +48,9 @@ export default function BookingsPage() {
   const updateMutation = useUpdateBooking();
   const deleteMutation = useDeleteBooking();
   const { showToast } = useToast();
+  const { data: currentUser } = useCurrentUser();
+  const role = currentUser?.user?.role;
+  const canManage = role === "OWNER" || role === "ADMIN";
   const [form, setForm] = useState<BookingForm>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 const [errors, setErrors] = useState<Partial<Record<"propertyId" | "customerId" | "bookingDate" | "assignedToEmployeeId" | "amount", string>>>({});
@@ -74,8 +77,10 @@ const [errors, setErrors] = useState<Partial<Record<"propertyId" | "customerId" 
     { accessorKey: "paymentStatus", header: "Payment", cell: ({ row }) => <Badge variant="outline" className={paymentColors[row.original.paymentStatus]}>{row.original.paymentStatus}</Badge> },
     { id: "actions", header: "", cell: ({ row }) => (
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ propertyId: row.original.propertyId, customerId: row.original.customerId, amount: row.original.amount, status: row.original.status, paymentStatus: row.original.paymentStatus, assignedToEmployeeId: row.original.assignedToEmployeeId, bookingDate: row.original.bookingDate.slice(0, 10), leadId: row.original.leadId ?? undefined, notes: row.original.notes ?? undefined } as BookingForm); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        {canManage && (<>
+          <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ propertyId: row.original.propertyId, customerId: row.original.customerId, amount: row.original.amount, status: row.original.status, paymentStatus: row.original.paymentStatus, assignedToEmployeeId: row.original.assignedToEmployeeId, bookingDate: row.original.bookingDate.slice(0, 10), leadId: row.original.leadId ?? undefined, notes: row.original.notes ?? undefined } as BookingForm); }}><Pencil className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        </>)}
       </div>
     )},
   ];
@@ -84,6 +89,7 @@ const [errors, setErrors] = useState<Partial<Record<"propertyId" | "customerId" 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h2 className="text-2xl font-semibold">Bookings</h2><p className="text-sm text-muted-foreground">Manage property bookings</p></div>
+        {canManage && (
         <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Booking</DialogTrigger>
           <DialogContent className="sm:max-w-md">
@@ -102,6 +108,7 @@ const [errors, setErrors] = useState<Partial<Record<"propertyId" | "customerId" 
             <DialogFooter showCloseButton><Button onClick={() => { const rules: ValidationRules<BookingForm> = { propertyId: { required: "Property is required" }, customerId: { required: "Customer is required" }, bookingDate: { required: "Booking date is required" }, assignedToEmployeeId: { required: "Assigned employee is required" }, amount: { required: "Amount is required" } }; const fieldErrors = validateForm(form, rules); setErrors(fieldErrors); if (Object.keys(fieldErrors).length > 0) return; createMutation.mutate({ propertyId: form.propertyId, customerId: form.customerId, leadId: form.leadId || undefined, assignedToEmployeeId: form.assignedToEmployeeId, bookingDate: new Date(form.bookingDate!).toISOString(), amount: form.amount, status: form.status || "PENDING", paymentStatus: form.paymentStatus || "PENDING", notes: form.notes || undefined } as CreateBookingDto, { onSuccess: () => { setCreateOpen(false); resetForm(); setErrors({}); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create booking"), "error") }); }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">

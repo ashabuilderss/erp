@@ -9,19 +9,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { CardSkeleton, TableSkeleton } from "@/components/ui/skeleton-variants";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { useAttendance, useCreateAttendance, useUpdateAttendance, useDeleteAttendance, useVerifyAttendance, useMyAttendance, useCheckIn, useCheckOut, useUpload, useEmployees } from "@/hooks/api";
+import { useAttendance, useCreateAttendance, useUpdateAttendance, useDeleteAttendance, useVerifyAttendance, useMyAttendance, useCheckIn, useCheckOut, useUpload, useEmployees, useEvidenceReviews, useReviewEvidence, useEvidenceReview } from "@/hooks/api";
 import { useCurrentUser } from "@/hooks/api";
 import { useToast } from "@/components/ui/toast";
-import type { Attendance, AttendanceStatus, CreateAttendanceDto, QueryAttendanceDto, UpdateAttendanceDto } from "@/lib/types";
+import type { Attendance, AttendanceStatus, CreateAttendanceDto, QueryAttendanceDto, UpdateAttendanceDto, EvidenceReview, EvidenceReviewStatus } from "@/lib/types";
 import { format } from "date-fns";
 
 const statusColors: Record<string, string> = {
-  PRESENT: "bg-green-100 text-green-800", ABSENT: "bg-red-100 text-red-800",
-  HALF_DAY: "bg-yellow-100 text-yellow-800", LEAVE: "bg-blue-100 text-blue-800",
+  COMPLETED: "bg-green-100 text-green-800",
+  UNDER_REVIEW: "bg-yellow-100 text-yellow-800",
 };
 
 function EmployeeAttendanceView() {
@@ -31,6 +33,7 @@ function EmployeeAttendanceView() {
   const todayStr = myAttendanceRes?.today ?? new Date().toISOString().slice(0, 10);
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
+
   const { uploadGeneral, uploading: uploadLoading } = useUpload();
   const [gpsLoading, setGpsLoading] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string>("");
@@ -65,6 +68,9 @@ function EmployeeAttendanceView() {
   const handleCheckIn = useCallback(async () => {
     setGpsLoading(true);
     const coords = await getPosition();
+    if (!coords) {
+      showToast("Location unavailable. Check-in will proceed without GPS coordinates.", "error");
+    }
     checkIn.mutate({
       latitude: coords?.latitude,
       longitude: coords?.longitude,
@@ -79,6 +85,9 @@ function EmployeeAttendanceView() {
   const handleCheckOut = useCallback(async () => {
     setGpsLoading(true);
     const coords = await getPosition();
+    if (!coords) {
+      showToast("Location unavailable. Check-out will proceed without GPS coordinates.", "error");
+    }
     checkOut.mutate({
       latitude: coords?.latitude,
       longitude: coords?.longitude,
@@ -138,8 +147,7 @@ function EmployeeAttendanceView() {
                 <Button onClick={handleCheckIn} disabled={checkIn.isPending || gpsLoading || uploadLoading}>
                   <LogIn className="h-4 w-4 mr-1" />
                   {gpsLoading ? "Getting location..." : checkIn.isPending ? "Checking in..." : "Check In"}
-                </Button>
-              </>
+                </Button>              </>
             )}
             {isCheckedIn && (
               <>
@@ -203,6 +211,209 @@ function EmployeeAttendanceView() {
   );
 }
 
+function EvidenceReviewQueue({ role }: { role: string | undefined }) {
+  const canReview = role === "OWNER" || role === "ADMIN" || role === "HR_MANAGER" || role === "MANAGER";
+  const { data, isLoading, refetch } = useEvidenceReviews({ status: "PENDING" });
+  const reviewMutation = useReviewEvidence();
+  const [viewId, setViewId] = useState<string | null>(null);
+
+  const handleReview = (id: string, status: EvidenceReviewStatus, remarks?: string) => {
+    reviewMutation.mutate({ id, status, remarks }, {
+      onSuccess: () => refetch(),
+    });
+  };
+
+  const columns: ColumnDef<EvidenceReview>[] = [
+    {
+      accessorKey: "id",
+      header: "ID",
+      cell: ({ row }) => row.getValue("id"),
+    },
+    {
+      accessorKey: "createdAt",
+      header: "Submitted",
+      cell: ({ row }) => format(new Date(row.original.createdAt), "PPpp"),
+    },
+    {
+      accessorKey: "punch",
+      header: "Punch",
+      cell: ({ row }) => {
+        const punch = row.original.punch;
+        return punch
+          ? `${punch.punchType} @ ${format(new Date(punch.timestamp), "HH:mm")} (${punch.latitude?.toFixed(5) ?? "-"}, ${punch.longitude?.toFixed(5) ?? "-"})`
+          : "—";
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <Badge variant="outline" className={statusColors[row.original.status] as string}>
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setViewId(row.original.id)}
+          >
+            <Camera className="h-4 w-4" />
+          </Button>
+          {canReview && row.original.status === "PENDING" && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => handleReview(row.original.id, "APPROVED")}
+                disabled={reviewMutation.isPending}
+              >
+                <ShieldCheck className="h-4 w-4 text-green-600" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => handleReview(row.original.id, "FLAGGED", "Needs follow-up")}
+                disabled={reviewMutation.isPending}
+              >
+                <ClipboardList className="h-4 w-4 text-amber-600" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => handleReview(row.original.id, "REJECTED", "Insufficient evidence")}
+                disabled={reviewMutation.isPending}
+              >
+                <Trash2 className="h-4 w-4 text-red-600" />
+              </Button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold">Evidence Awaiting Review</h3>
+        <p className="text-sm text-muted-foreground">
+          Review employee punch-in/out selfies with GPS evidence. Approve marks the day
+          VERIFIED; Flag/Rejection keeps it UNDER_REVIEW.
+        </p>
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={data?.items || []}
+        isLoading={isLoading}
+        searchKey="id"
+        totalRecords={data?.total ?? 0}
+      />
+
+      <EvidenceViewDialog
+        open={!!viewId}
+        onClose={() => setViewId(null)}
+        reviewId={viewId}
+      />
+    </div>
+  );
+}
+
+function EvidenceViewDialog({
+  open,
+  onClose,
+  reviewId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  reviewId: string | null;
+}) {
+  const { data: view, isLoading } = useEvidenceReview(reviewId ?? "");
+  const selfieProxyUrl = view?.selfieUrl?.replace(/^\/uploads\//, "/api/uploads/") ?? null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Evidence Details</DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        ) : view ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <span className="font-medium">Status:</span> {view.status}
+              </div>
+              <div>
+                <span className="font-medium">Evidence Type:</span> {view.evidence?.type}
+              </div>
+              <div>
+                <span className="font-medium">Punch:</span> {view.punch?.punchType}
+              </div>
+              <div>
+                <span className="font-medium">Time:</span>{" "}
+                {view.punch?.timestamp ? format(new Date(view.punch.timestamp), "PPpp") : "—"}
+              </div>
+              {view.punch?.latitude != null && view.punch?.longitude != null && (
+                <div className="col-span-2">
+                  <span className="font-medium">GPS:</span>{" "}
+                  {view.punch.latitude.toFixed(6)}, {view.punch.longitude.toFixed(6)}
+                </div>
+              )}
+              {view.punch?.deviceId && (
+                <div>
+                  <span className="font-medium">Device:</span> {view.punch.deviceId}
+                </div>
+              )}
+              <div>
+                <span className="font-medium">Mock location:</span>{" "}
+                {view.evidence?.mockLocationDetected ? "Yes ⚠️" : "No"}
+              </div>
+              <div>
+                <span className="font-medium">Developer mode:</span>{" "}
+                {view.evidence?.developerModeActive ? "Yes ⚠️" : "No"}
+              </div>
+              {view.remarks && (
+                <div className="col-span-2">
+                  <span className="font-medium">Remarks:</span> {view.remarks}
+                </div>
+              )}
+            </div>
+            {selfieProxyUrl && (
+              <div>
+                <span className="font-medium text-sm">Selfie:</span>
+                <img
+                  src={selfieProxyUrl}
+                  alt="Selfie evidence"
+                  className="mt-1 rounded border max-w-full h-auto"
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No evidence found.</p>
+        )}
+        <DialogFooter showCloseButton>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AdminAttendanceView({ role }: { role: string | undefined }) {
   const [query, setQuery] = useState<QueryAttendanceDto>({ page: 1, limit: 10, sortBy: "date", sortOrder: "desc", search: "" });
   const { data, isLoading } = useAttendance(query);
@@ -211,19 +422,24 @@ function AdminAttendanceView({ role }: { role: string | undefined }) {
   const deleteMutation = useDeleteAttendance();
   const verifyMutation = useVerifyAttendance();
   const { showToast } = useToast();
-  const canVerify = role === "OWNER" || role === "ADMIN" || role === "HR_MANAGER";
+  const canVerify = role === "OWNER" || role === "ADMIN" || role === "HR_MANAGER" || role === "MANAGER";
   const [createOpen, setCreateOpen] = useState(false);
   const [editItem, setEditItem] = useState<Attendance | null>(null);
   const [form, setForm] = useState<Partial<CreateAttendanceDto & UpdateAttendanceDto>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [tab, setTab] = useState<"records" | "evidence">("records");
+  const canReview = role === "OWNER" || role === "ADMIN" || role === "HR_MANAGER" || role === "MANAGER";
 
   const { data: empData } = useEmployees({ limit: 200 });
   const employees = empData?.data || [];
 
-  const resetForm = () => setForm({ employeeId: "", date: "", checkIn: "", checkOut: "", status: "PRESENT" });
+  const resetForm = () => setForm({ employeeId: "", date: "", checkIn: "", checkOut: "", status: "UNDER_REVIEW" });
 
   const columns: ColumnDef<Attendance>[] = [
-    { accessorKey: "employee", header: "Employee", cell: ({ row }) => <span className="font-medium">{row.original.employee ? `${row.original.employee.employeeCode}` : row.original.employeeId}</span> },
+    { accessorKey: "employee", header: "Employee", cell: ({ row }) => {
+      const emp = (row.original as any).employees || row.original.employee;
+      return <span className="font-medium">{emp ? `${emp.employeeCode}` : row.original.employeeId}</span>;
+    } },
     { accessorKey: "date", header: "Date", cell: ({ row }) => <span>{format(new Date(row.original.date), "MMM dd, yyyy")}</span> },
     { accessorKey: "checkIn", header: "Check In", cell: ({ row }) => <span>{row.original.checkIn ? format(new Date(row.original.checkIn), "HH:mm") : "-"}</span> },
     { accessorKey: "checkOut", header: "Check Out", cell: ({ row }) => <span>{row.original.checkOut ? format(new Date(row.original.checkOut), "HH:mm") : "-"}</span> },
@@ -254,36 +470,51 @@ function AdminAttendanceView({ role }: { role: string | undefined }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-semibold">Attendance</h2><p className="text-sm text-muted-foreground">Track employee attendance</p></div>
-        <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (o) resetForm(); }}>
-          <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Record</DialogTrigger>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader><DialogTitle>Add Attendance Record</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><label className="text-sm font-medium">Employee</label><Select value={form.employeeId || ""} onValueChange={(v) => setForm({ ...form, employeeId: v ?? "" })}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
-              <div><label className="text-sm font-medium">Date</label><Input type="date" value={form.date || ""} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Check In</label><Input type="time" value={form.checkIn || ""} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Check Out</label><Input type="time" value={form.checkOut || ""} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Status</label><Select value={form.status || "PRESENT"} onValueChange={(v) => setForm({ ...form, status: (v ?? "PRESENT") as AttendanceStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PRESENT">Present</SelectItem><SelectItem value="ABSENT">Absent</SelectItem><SelectItem value="HALF_DAY">Half Day</SelectItem><SelectItem value="LEAVE">Leave</SelectItem></SelectContent></Select></div>
-            </div>
-            <DialogFooter showCloseButton><Button onClick={() => {
-              if (!form.employeeId || !form.date) { showToast("Employee ID and Date are required", "error"); return; }
-              createMutation.mutate({
-                employeeId: form.employeeId,
-                date: form.date,
-                checkIn: form.checkIn && form.date ? `${form.date}T${form.checkIn}:00.000Z` : undefined,
-                checkOut: form.checkOut && form.date ? `${form.date}T${form.checkOut}:00.000Z` : undefined,
-                status: form.status as AttendanceStatus | undefined,
-              }, {
-                onSuccess: () => { setCreateOpen(false); resetForm(); },
-                onError: (err) => showToast(err?.message || "Failed to create attendance", "error"),
-              });
-            }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <div>
+          <h2 className="text-2xl font-semibold">Attendance</h2>
+          <p className="text-sm text-muted-foreground">Track employee attendance</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Tabs defaultValue="records" value={tab} onValueChange={(v) => setTab(v as "records" | "evidence")}>
+            <TabsList>
+              <TabsTrigger value="records">Records</TabsTrigger>
+              {canReview && <TabsTrigger value="evidence">Evidence Review</TabsTrigger>}
+            </TabsList>
+          </Tabs>
+          <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (o) resetForm(); }}>
+            <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Record</DialogTrigger>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader><DialogTitle>Add Attendance Record</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div><label className="text-sm font-medium">Employee</label><Select value={form.employeeId || ""} onValueChange={(v) => setForm({ ...form, employeeId: v ?? "" })}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
+                <div><label className="text-sm font-medium">Date</label><Input type="date" value={form.date || ""} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
+                <div><label className="text-sm font-medium">Check In</label><Input type="time" value={form.checkIn || ""} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} /></div>
+                <div><label className="text-sm font-medium">Check Out</label><Input type="time" value={form.checkOut || ""} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} /></div>
+                <div><label className="text-sm font-medium">Status</label><Select value={form.status || "UNDER_REVIEW"} onValueChange={(v) => setForm({ ...form, status: (v ?? "UNDER_REVIEW") as AttendanceStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPLETED">Completed</SelectItem><SelectItem value="UNDER_REVIEW">Under Review</SelectItem></SelectContent></Select></div>
+              </div>
+              <DialogFooter showCloseButton><Button onClick={() => {
+                if (!form.employeeId || !form.date) { showToast("Employee ID and Date are required", "error"); return; }
+                createMutation.mutate({
+                  employeeId: form.employeeId,
+                  date: form.date,
+                  checkIn: form.checkIn && form.date ? `${form.date}T${form.checkIn}:00.000Z` : undefined,
+                  checkOut: form.checkOut && form.date ? `${form.date}T${form.checkOut}:00.000Z` : undefined,
+                  status: form.status as AttendanceStatus | undefined,
+                }, {
+                  onSuccess: () => { setCreateOpen(false); resetForm(); },
+                  onError: (err) => showToast(err?.message || "Failed to create attendance", "error"),
+                });
+              }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      <DataTable columns={columns} data={data?.data || []} isLoading={isLoading} searchKey="attendance" onSearchChange={(s) => setQuery(prev => ({ ...prev, search: s, page: 1 }))} pageCount={data?.meta?.totalPages} totalRecords={data?.meta?.total} onPaginationChange={(pageIndex, pageSize) => setQuery(prev => ({ ...prev, page: pageIndex + 1, limit: pageSize }))} />
+      {tab === "records" && (
+        <DataTable columns={columns} data={data?.data || []} isLoading={isLoading} searchKey="attendance" onSearchChange={(s) => setQuery(prev => ({ ...prev, search: s, page: 1 }))} pageCount={data?.meta?.totalPages} totalRecords={data?.meta?.total} onPaginationChange={(pageIndex, pageSize) => setQuery(prev => ({ ...prev, page: pageIndex + 1, limit: pageSize }))} />
+      )}
+
+      {tab === "evidence" && <EvidenceReviewQueue role={role} />}
 
       <Dialog open={!!editItem} onOpenChange={(o) => { if (!o) setEditItem(null); }}>
         <DialogContent className="sm:max-w-sm">
@@ -291,7 +522,7 @@ function AdminAttendanceView({ role }: { role: string | undefined }) {
           <div className="space-y-3">
             <div><label className="text-sm font-medium">Check In</label><Input type="time" value={form.checkIn || ""} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} /></div>
             <div><label className="text-sm font-medium">Check Out</label><Input type="time" value={form.checkOut || ""} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} /></div>
-            <div><label className="text-sm font-medium">Status</label><Select value={form.status || "PRESENT"} onValueChange={(v) => setForm({ ...form, status: (v ?? "PRESENT") as AttendanceStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PRESENT">Present</SelectItem><SelectItem value="ABSENT">Absent</SelectItem><SelectItem value="HALF_DAY">Half Day</SelectItem><SelectItem value="LEAVE">Leave</SelectItem></SelectContent></Select></div>
+            <div><label className="text-sm font-medium">Status</label><Select value={form.status || "UNDER_REVIEW"} onValueChange={(v) => setForm({ ...form, status: (v ?? "UNDER_REVIEW") as AttendanceStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPLETED">Completed</SelectItem><SelectItem value="UNDER_REVIEW">Under Review</SelectItem></SelectContent></Select></div>
           </div>
             <DialogFooter showCloseButton><Button onClick={() => { if (editItem) { updateMutation.mutate({ id: editItem.id, dto: { ...form, checkIn: form.checkIn && form.date ? `${form.date}T${form.checkIn}:00.000Z` : undefined, checkOut: form.checkOut && form.date ? `${form.date}T${form.checkOut}:00.000Z` : undefined } }, { onSuccess: () => { setEditItem(null); }, onError: (err) => showToast(err?.message || "Failed to update attendance", "error") }); } }} disabled={updateMutation.isPending}>Save</Button></DialogFooter>
         </DialogContent>

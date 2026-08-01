@@ -101,7 +101,7 @@ async function proxy(
 
   let res: Response;
   try {
-    const upstreamUrl = `${API_URL}/api/${pathStr}${request.nextUrl.search}`;
+    const upstreamUrl = `${API_URL}/api/v1/${pathStr}${request.nextUrl.search}`;
     res = await fetch(upstreamUrl, {
       method: request.method,
       headers,
@@ -113,7 +113,7 @@ async function proxy(
     const msg =
       err instanceof Error && err.name === "AbortError"
         ? "Backend request timed out"
-        : `Backend unreachable at ${API_URL}/api/${pathStr}`;
+        : `Backend unreachable at ${API_URL}/api/v1/${pathStr}`;
     return NextResponse.json({ message: msg }, { status: 502 });
   }
   clearTimeout(timeout);

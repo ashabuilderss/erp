@@ -62,13 +62,19 @@ export class SecurityEventsService {
     });
 
     return {
-      data: events.map((e) => ({
-        id: e.id,
-        email: e.metadata && typeof e.metadata === 'object' && 'email' in e.metadata ? String(e.metadata.email) : e.userId ?? 'unknown',
-        status: e.eventType === 'LOGIN_SUCCESS' ? 'success' : 'failed',
-        reason: e.description ?? null,
-        createdAt: e.createdAt.toISOString(),
-      })),
+      data: events.map((e) => {
+        const metadata = e.metadata as Record<string, any> | null;
+        return {
+          id: e.id,
+          email:
+            metadata && typeof metadata === 'object' && 'email' in metadata
+              ? String(metadata.email)
+              : (e.userId ?? 'unknown'),
+          status: e.eventType === 'LOGIN_SUCCESS' ? 'success' : 'failed',
+          reason: e.description ?? null,
+          createdAt: e.createdAt.toISOString(),
+        };
+      }),
       meta: { total: events.length },
     };
   }
@@ -78,12 +84,12 @@ export class SecurityEventsService {
       where: { companyId, revokedAt: null, expiresAt: { gte: new Date() } },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      include: { user: { select: { email: true } } },
+      include: { users: { select: { email: true } } },
     });
 
     return tokens.map((t) => ({
       id: t.id,
-      email: t.user?.email ?? 'unknown',
+      email: t.users?.email ?? 'unknown',
       createdAt: t.createdAt.toISOString(),
     }));
   }

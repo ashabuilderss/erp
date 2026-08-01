@@ -112,6 +112,10 @@ export function useOfflineDraft(): UseOfflineDraftReturn {
       entityType: string,
       formData: Record<string, unknown>
     ): Promise<string | null> => {
+      if (entityType === "attendance") {
+        throw new Error("Attendance must be submitted online");
+      }
+
       // Check if at max capacity
       const count = await dbGetDraftCount();
       if (count >= MAX_DRAFTS) {

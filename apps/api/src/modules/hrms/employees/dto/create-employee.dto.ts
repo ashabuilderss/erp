@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsDateString,
   IsNumber,
+  Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { EmployeeStatus, EmployeeStaffType } from '@prisma/client';
@@ -45,6 +46,7 @@ export class CreateEmployeeDto {
   @ApiPropertyOptional({ example: 50000 })
   @IsOptional()
   @IsNumber()
+  @Min(0)
   salary?: number;
 
   @ApiPropertyOptional({ example: '123 Main St, City' })
@@ -57,7 +59,10 @@ export class CreateEmployeeDto {
   @IsEnum(EmployeeStatus)
   status?: EmployeeStatus = EmployeeStatus.ACTIVE;
 
-  @ApiPropertyOptional({ enum: EmployeeStaffType, default: EmployeeStaffType.OFFICE })
+  @ApiPropertyOptional({
+    enum: EmployeeStaffType,
+    default: EmployeeStaffType.OFFICE,
+  })
   @IsOptional()
   @IsEnum(EmployeeStaffType)
   staffType?: EmployeeStaffType = EmployeeStaffType.OFFICE;

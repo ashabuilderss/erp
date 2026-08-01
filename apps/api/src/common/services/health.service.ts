@@ -41,8 +41,14 @@ export class HealthService {
       redisStatus = 'error';
     }
 
-    const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-    const fcmConfigured = !!(process.env.FCM_CREDENTIALS_PATH || process.env.FCM_SERVER_KEY);
+    const smtpConfigured = !!(
+      process.env.SMTP_HOST &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS
+    );
+    const fcmConfigured = !!(
+      process.env.FCM_CREDENTIALS_PATH || process.env.FCM_SERVER_KEY
+    );
 
     const overallStatus =
       dbStatus === 'ok' && redisStatus !== 'error' ? 'ok' : 'degraded';

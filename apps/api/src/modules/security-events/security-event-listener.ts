@@ -9,7 +9,12 @@ export class SecurityEventListener {
   constructor(private prisma: PrismaService) {}
 
   @OnEvent('security.login.success')
-  async handleLoginSuccess(payload: { userId: string; companyId: string; email: string; ipAddress?: string }) {
+  async handleLoginSuccess(payload: {
+    userId: string;
+    companyId: string;
+    email: string;
+    ipAddress?: string;
+  }) {
     try {
       await this.prisma.securityEvent.create({
         data: {
@@ -28,7 +33,11 @@ export class SecurityEventListener {
   }
 
   @OnEvent('security.login.failure')
-  async handleLoginFailure(payload: { email: string; reason?: string; ipAddress?: string }) {
+  async handleLoginFailure(payload: {
+    email: string;
+    reason?: string;
+    ipAddress?: string;
+  }) {
     try {
       const user = await this.prisma.user.findFirst({
         where: { email: payload.email },
@@ -41,7 +50,8 @@ export class SecurityEventListener {
           companyId: user.companyId,
           eventType: 'LOGIN_FAILURE',
           severity: 'WARNING',
-          description: payload.reason ?? `Failed login attempt for ${payload.email}`,
+          description:
+            payload.reason ?? `Failed login attempt for ${payload.email}`,
           userId: user.id,
           ipAddress: payload.ipAddress,
           metadata: { email: payload.email, reason: payload.reason },
@@ -70,8 +80,41 @@ export class SecurityEventListener {
     }
   }
 
+  @OnEvent('security.password.change.failure')
+  async handlePasswordChangeFailure(payload: {
+    userId: string;
+    companyId: string;
+    ipAddress?: string;
+    reason?: string;
+  }) {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { email: true },
+      });
+      await this.prisma.securityEvent.create({
+        data: {
+          companyId: payload.companyId,
+          eventType: 'PASSWORD_CHANGE_FAILURE',
+          severity: 'WARNING',
+          description: `Failed password change attempt for ${user?.email ?? payload.userId}: ${payload.reason ?? 'unknown'}`,
+          userId: payload.userId,
+          ipAddress: payload.ipAddress,
+          metadata: { reason: payload.reason },
+        },
+      });
+    } catch (err) {
+      this.logger.error('Failed to log password change failure', err);
+    }
+  }
+
   @OnEvent('security.unauthorized')
-  async handleUnauthorized(payload: { userId?: string; companyId: string; path: string; method: string }) {
+  async handleUnauthorized(payload: {
+    userId?: string;
+    companyId: string;
+    path: string;
+    method: string;
+  }) {
     try {
       await this.prisma.securityEvent.create({
         data: {

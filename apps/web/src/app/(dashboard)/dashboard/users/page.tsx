@@ -14,6 +14,10 @@ const roleColors: Record<string, string> = {
   OWNER: "bg-red-100 text-red-800",
   ADMIN: "bg-purple-100 text-purple-800",
   HR_MANAGER: "bg-blue-100 text-blue-800",
+  ACCOUNTS: "bg-teal-100 text-teal-800",
+  MANAGER: "bg-indigo-100 text-indigo-800",
+  TEAM_LEAD: "bg-orange-100 text-orange-800",
+  FIELD_EMPLOYEE: "bg-lime-100 text-lime-800",
   EMPLOYEE: "bg-green-100 text-green-800",
 };
 
@@ -56,6 +60,10 @@ export default function UsersPage() {
               <SelectItem value="OWNER">Owner</SelectItem>
               <SelectItem value="ADMIN">Admin</SelectItem>
               <SelectItem value="HR_MANAGER">HR Manager</SelectItem>
+              <SelectItem value="ACCOUNTS">Accounts</SelectItem>
+              <SelectItem value="MANAGER">Manager</SelectItem>
+              <SelectItem value="TEAM_LEAD">Team Lead</SelectItem>
+              <SelectItem value="FIELD_EMPLOYEE">Field Employee</SelectItem>
               <SelectItem value="EMPLOYEE">Employee</SelectItem>
             </SelectContent>
           </Select>

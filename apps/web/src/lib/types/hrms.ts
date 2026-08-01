@@ -1,6 +1,9 @@
 import type { UserRole } from "./common";
 
-export type AttendanceStatus = "PRESENT" | "ABSENT" | "HALF_DAY" | "LEAVE";
+export type AttendanceStatus = "COMPLETED" | "UNDER_REVIEW";
+export type EvidenceReviewStatus = "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+export type EvidenceType = "SELFIE" | "LOCATION" | "OTHER";
+export type PunchType = "IN" | "OUT" | "BREAK_START" | "BREAK_END";
 export type LeaveType = "SICK" | "CASUAL" | "ANNUAL" | "OTHER" | "MEDICAL";
 export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type EmployeeStatus = "ACTIVE" | "INACTIVE" | "TERMINATED";
@@ -77,6 +80,63 @@ export interface Attendance {
   updatedAt: string;
   employee?: Employee;
   verifiedBy?: Employee;
+}
+
+export interface EvidenceReview {
+  id: string;
+  companyId: string;
+  evidenceId: string;
+  punchId: string | null;
+  reviewedById: string;
+  status: EvidenceReviewStatus;
+  remarks: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  punch?: {
+    id: string;
+    punchType: PunchType;
+    timestamp: string;
+    latitude: number | null;
+    longitude: number | null;
+    deviceId: string | null;
+    locationId: string | null;
+  } | null;
+}
+
+export interface EvidenceReviewView {
+  id: string;
+  status: EvidenceReviewStatus;
+  reviewedById: string;
+  reviewedAt: string | null;
+  remarks: string | null;
+  createdAt: string;
+  companyId: string;
+  evidence: {
+    id: string;
+    type: EvidenceType;
+    punchId: string | null;
+    gpsAccuracy: number | null;
+    mockLocationDetected: boolean;
+    developerModeActive: boolean;
+  };
+  punch: {
+    id: string;
+    punchType: PunchType;
+    timestamp: string;
+    latitude: number | null;
+    longitude: number | null;
+    deviceId: string | null;
+    locationId: string | null;
+  } | null;
+  selfieUrl: string | null;
+}
+
+export interface EvidenceReviewListResponse {
+  items: EvidenceReview[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface LeaveRequest {
@@ -411,6 +471,8 @@ export interface Vendor {
   address: string | null;
   gstin: string | null;
   status: VendorStatus;
+  rating: number | null;
+  isBlacklisted: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -451,6 +513,7 @@ export interface InventoryItem {
   siteId: string;
   materialId: string;
   quantityOnHand: number;
+  lowStockThreshold: number;
   lastUpdated: string;
   site?: { name: string };
   material?: { name: string; unit: string; category: string };
@@ -497,6 +560,27 @@ export interface CreateMaterialInwardDto {
   vendorId: string; siteId: string; materialId: string;
   quantity: number; unitPrice: number; receivedDate: string; notes?: string;
 }
+export interface MaterialConsumption {
+  id: string;
+  companyId: string;
+  siteId: string;
+  phaseId: string | null;
+  materialId: string;
+  quantity: number;
+  consumedDate: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  constructionSites?: { name: string };
+  sitePhases?: { name: string };
+  materials?: { name: string; unit: string };
+}
+
+export interface CreateConsumptionDto {
+  siteId: string; phaseId?: string; materialId: string;
+  quantity: number; consumedDate: string; notes?: string;
+}
+
 export interface CreateLabourEntryDto {
   siteId: string; labourName: string; labourType: LabourType;
   date: string; hoursWorked?: number; wagesAmount: number; notes?: string;
@@ -513,6 +597,15 @@ export interface Broker {
   phone: string | null; email: string | null; commissionRate: number | null;
   isActive: boolean; lastLoginAt: string | null; createdAt: string; updatedAt: string;
   _count?: { leads: number };
+}
+
+export interface CreateBrokerDto {
+  name: string;
+  companyName?: string;
+  phone?: string;
+  email?: string;
+  commissionRate?: number;
+  isActive?: boolean;
 }
 
 export interface Complaint {

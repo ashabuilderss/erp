@@ -9,7 +9,7 @@ test.describe.serial("Reports & Analytics Page", () => {
   test("Reports page loads with analytics cards", async ({ page }) => {
     await navigateTo(page, "/dashboard/reports");
 
-    await expect(page.getByRole("heading", { name: "Total Employees" })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: "Active Employees" })).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("heading", { name: "Total Leads" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Properties" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Bookings" })).toBeVisible();
@@ -25,13 +25,13 @@ test.describe.serial("Reports & Analytics Page", () => {
   test("Reports page shows report exports section", async ({ page }) => {
     await navigateTo(page, "/dashboard/reports");
 
-    await expect(page.getByRole("heading", { name: "Recent Exports" })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: "Export History" })).toBeVisible({ timeout: 10000 });
   });
 
   test("Reports page shows report catalog", async ({ page }) => {
     await navigateTo(page, "/dashboard/reports");
 
-    await expect(page.getByRole("heading", { name: "Export Catalog" })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: "Quick Export" })).toBeVisible({ timeout: 10000 });
   });
 
   test("Export buttons are present for each report type", async ({ page }) => {
@@ -49,7 +49,7 @@ test.describe.serial("Reports Page — Owner Access", () => {
     await signInAsOwner(page);
     await navigateTo(page, "/dashboard/reports");
 
-    await expect(page.getByRole("heading", { name: "Total Employees" })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: "Active Employees" })).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("heading", { name: "Total Leads" })).toBeVisible();
   });
 });

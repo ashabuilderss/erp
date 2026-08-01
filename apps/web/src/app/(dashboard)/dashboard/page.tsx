@@ -16,7 +16,14 @@ export default function DashboardPage() {
 
   const role = currentUser?.user?.role || "EMPLOYEE";
 
-  const dashboard = role === "OWNER" ? <OwnerDashboard /> : role === "HR_MANAGER" ? <HRDashboard /> : role === "EMPLOYEE" ? <EmployeeDashboard /> : <AdminDashboard />;
+  let dashboard = <EmployeeDashboard />;
+  if (role === "OWNER") {
+    dashboard = <OwnerDashboard />;
+  } else if (role === "ADMIN" || role === "ACCOUNTS") {
+    dashboard = <AdminDashboard />;
+  } else if (role === "HR_MANAGER") {
+    dashboard = <HRDashboard />;
+  }
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback} onReset={() => window.location.reload()}>

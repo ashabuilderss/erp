@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import {
   CreatePaymentEntryDto,
@@ -19,7 +23,7 @@ export class PaymentEntriesService {
     return this.prisma.paymentEntry.findMany({
       where: { bookingId },
       orderBy: { paymentDate: 'desc' },
-      include: { recordedBy: { select: { employeeCode: true } } },
+      include: { employees: { select: { employeeCode: true } } },
     });
   }
 
@@ -35,7 +39,9 @@ export class PaymentEntriesService {
     if (!booking) throw new NotFoundException('Booking not found');
 
     if (booking.status === 'CANCELLED') {
-      throw new BadRequestException('Cannot record payment against a cancelled booking');
+      throw new BadRequestException(
+        'Cannot record payment against a cancelled booking',
+      );
     }
 
     if (booking.paymentStatus === 'COMPLETED') {
@@ -49,7 +55,7 @@ export class PaymentEntriesService {
     const totalPaid = Number(existingTotal._sum.amount ?? 0);
     if (totalPaid + dto.amount > Number(booking.amount)) {
       throw new BadRequestException(
-        `Payment amount (${dto.amount}) would exceed remaining balance. Booking amount: ${booking.amount}, already paid: ${totalPaid}`,
+        `Payment amount (${dto.amount}) would exceed remaining balance. Booking amount: ${booking.amount.toString()}, already paid: ${totalPaid}`,
       );
     }
 
@@ -87,7 +93,7 @@ export class PaymentEntriesService {
 
   async update(id: string, dto: UpdatePaymentEntryDto, companyId: string) {
     const entry = await this.prisma.paymentEntry.findFirst({
-      where: { id, booking: { companyId } },
+      where: { id, bookings: { companyId } },
     });
     if (!entry) throw new NotFoundException('Payment entry not found');
 
@@ -107,10 +113,10 @@ export class PaymentEntriesService {
 
   async remove(id: string, companyId: string) {
     const entry = await this.prisma.paymentEntry.findFirst({
-      where: { id, booking: { companyId } },
+      where: { id, bookings: { companyId } },
     });
     if (!entry) throw new NotFoundException('Payment entry not found');
 
-    return this.prisma.paymentEntry.delete({ where: { id } });
+    return this.prisma.paymentEntry.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }

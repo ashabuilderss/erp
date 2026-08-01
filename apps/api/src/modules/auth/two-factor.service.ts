@@ -10,11 +10,16 @@ import { EncryptionService } from '../../common/services/encryption.service';
 import * as otplib from 'otplib';
 import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 
 const TEMP_TOKEN_EXPIRY_MINUTES = 5;
+const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 const BCRYPT_ROUNDS = 12;
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 @Injectable()
 export class TwoFactorService {
@@ -73,8 +78,8 @@ export class TwoFactorService {
     if (user.totpEnabled) throw new BadRequestException('2FA already enabled');
 
     const decrypted = this.decryptSecret(user.totpSecret);
-    const isValid = await otplib.verify({ token, secret: decrypted });
-    if (!isValid) throw new BadRequestException('Invalid verification code');
+    const result = await otplib.verify({ token, secret: decrypted });
+    if (!result.valid) throw new BadRequestException('Invalid verification code');
 
     const backupCodes = Array.from({ length: 8 }, () =>
       randomBytes(4).toString('hex'),
@@ -93,6 +98,26 @@ export class TwoFactorService {
     });
 
     return { backupCodes };
+  }
+
+  /**
+   * §3.1: validate a TOTP token for a user (used for password-change
+   * re-challenge when 2FA is enabled).
+   */
+  async verifyTotp(userId: string, token: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, totpEnabled: true, totpSecret: true },
+    });
+    if (!user || !user.totpEnabled || !user.totpSecret) {
+      throw new UnauthorizedException('2FA is not enabled for this account');
+    }
+    const decrypted = this.decryptSecret(user.totpSecret);
+    const result = await otplib.verify({ token, secret: decrypted });
+    if (!result.valid) {
+      throw new UnauthorizedException('Invalid verification code');
+    }
+    return { valid: true };
   }
 
   async disable(userId: string, password: string) {
@@ -137,15 +162,40 @@ export class TwoFactorService {
     return { backupCodes };
   }
 
+  private async revokeAllUserTokens(userId: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private async createRefreshToken(userId: string, companyId: string) {
+    const rawToken = randomBytes(48).toString('hex');
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+    await this.prisma.refreshToken.create({
+      data: { token: tokenHash, userId, companyId, expiresAt },
+    });
+    return rawToken;
+  }
+
   private async createTempToken(userId: string, companyId: string) {
-    const token = randomBytes(32).toString('hex');
+    // Revoke any existing unused tokens for this user to prevent session fixation
+    await this.prisma.tempToken.updateMany({
+      where: { userId, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { expiresAt: new Date() },
+    });
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + TEMP_TOKEN_EXPIRY_MINUTES);
 
     await this.prisma.tempToken.create({
-      data: { token, userId, companyId, expiresAt },
+      data: { token: tokenHash, userId, companyId, expiresAt },
     });
-    return token;
+    return rawToken;
   }
 
   async generateChallenge(userId: string, companyId: string) {
@@ -155,7 +205,7 @@ export class TwoFactorService {
 
   async authenticate(tempTokenStr: string, token: string) {
     const stored = await this.prisma.tempToken.findUnique({
-      where: { token: tempTokenStr },
+      where: { token: hashToken(tempTokenStr) },
     });
     if (!stored || stored.usedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired temporary token');
@@ -169,8 +219,8 @@ export class TwoFactorService {
     }
 
     const decrypted = this.decryptSecret(user.totpSecret);
-    const isValid = await otplib.verify({ token, secret: decrypted });
-    if (!isValid) {
+    const result = await otplib.verify({ token, secret: decrypted });
+    if (!result.valid) {
       if (user.backupCodes) {
         const codes = user.backupCodes as string[];
         for (let i = 0; i < codes.length; i++) {
@@ -185,6 +235,7 @@ export class TwoFactorService {
               where: { id: stored.id },
               data: { usedAt: new Date() },
             });
+            await this.revokeAllUserTokens(user.id);
             const employee = await this.prisma.employee.findUnique({
               where: { userId: user.id },
               select: { id: true },
@@ -196,8 +247,11 @@ export class TwoFactorService {
               companyId: user.companyId,
               employeeId: employee?.id ?? null,
             };
+            const refreshToken = await this.createRefreshToken(user.id, user.companyId);
             return {
               accessToken: this.jwtService.sign(payload, { expiresIn: '15m' }),
+              refreshToken,
+              expiresIn: 900,
               backupCodeUsed: true,
               user: {
                 id: user.id,
@@ -219,6 +273,7 @@ export class TwoFactorService {
       where: { id: stored.id },
       data: { usedAt: new Date() },
     });
+    await this.revokeAllUserTokens(user.id);
 
     const employee = await this.prisma.employee.findUnique({
       where: { userId: user.id },
@@ -232,9 +287,11 @@ export class TwoFactorService {
       employeeId: employee?.id ?? null,
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refreshToken = await this.createRefreshToken(user.id, user.companyId);
 
     return {
       accessToken,
+      refreshToken,
       expiresIn: 900,
       user: {
         id: user.id,

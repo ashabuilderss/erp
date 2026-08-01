@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import type {
   ConstructionSite, SitePhase, Vendor, Material, MaterialInward,
-  InventoryItem, LabourEntry, ProgressPhoto,
+  InventoryItem, LabourEntry, ProgressPhoto, Broker, MaterialConsumption,
   CreateSiteDto, CreateVendorDto, CreateMaterialDto, CreateMaterialInwardDto,
-  CreateLabourEntryDto, CreateProgressPhotoDto,
+  CreateLabourEntryDto, CreateProgressPhotoDto, CreateBrokerDto,
+  CreateConsumptionDto,
 } from "@/lib/types";
 
 export function useSites(query = {}) {
@@ -124,4 +125,37 @@ export function useCreateProgressPhoto() {
 export function useDeleteProgressPhoto() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (id: string) => api.delete(`/progress-photos/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["progress-photos"] }) });
+}
+
+export function useBrokers(query = {}) {
+  return useQuery({ queryKey: ["brokers", query], queryFn: () => api.get<{ data: Broker[]; meta: any }>("/brokers", query) });
+}
+
+export function useCreateBroker() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (dto: CreateBrokerDto) => api.post("/brokers", dto), onSuccess: () => qc.invalidateQueries({ queryKey: ["brokers"] }) });
+}
+
+export function useUpdateBroker() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ id, dto }: { id: string; dto: Partial<CreateBrokerDto> }) => api.patch(`/brokers/${id}`, dto), onSuccess: () => qc.invalidateQueries({ queryKey: ["brokers"] }) });
+}
+
+export function useDeleteBroker() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.delete(`/brokers/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["brokers"] }) });
+}
+
+export function useConsumptions(query = {}) {
+  return useQuery({ queryKey: ["consumption", query], queryFn: () => api.get<{ data: MaterialConsumption[]; meta: any }>("/consumption", query) });
+}
+
+export function useCreateConsumption() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (dto: CreateConsumptionDto) => api.post("/consumption", dto), onSuccess: () => { qc.invalidateQueries({ queryKey: ["consumption"] }); qc.invalidateQueries({ queryKey: ["inventory"] }); } });
+}
+
+export function useDeleteConsumption() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.delete(`/consumption/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ["consumption"] }); qc.invalidateQueries({ queryKey: ["inventory"] }); } });
 }

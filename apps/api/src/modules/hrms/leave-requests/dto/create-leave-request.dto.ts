@@ -3,7 +3,9 @@ import {
   IsDateString,
   IsOptional,
   IsString,
+  IsNotEmpty,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LeaveType } from '@prisma/client';
@@ -25,7 +27,8 @@ export class CreateLeaveRequestDto {
   type: LeaveType = LeaveType.MEDICAL;
 
   @ApiPropertyOptional({ example: 'Medical emergency' })
-  @IsOptional()
+  @ValidateIf((o) => o.type === LeaveType.MEDICAL)
+  @IsNotEmpty()
   @IsString()
   @MaxLength(500)
   reason?: string;

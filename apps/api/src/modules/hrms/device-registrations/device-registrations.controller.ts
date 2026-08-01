@@ -12,18 +12,23 @@ import { DeviceRegistrationsService } from './device-registrations.service';
 import { CreateDeviceRegistrationDto } from './dto/create-device-registration.dto';
 import { QueryDeviceRegistrationDto } from './dto/query-device-registration.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { Permissions } from '../../../common/auth/permissions';
 import {
   CurrentCompany,
   CurrentEmployeeId,
 } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
 
 @Controller('device-registrations')
 export class DeviceRegistrationsController {
   constructor(private readonly service: DeviceRegistrationsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.DEVICE_CREATE)
   async create(
     @Body() dto: CreateDeviceRegistrationDto,
     @CurrentEmployeeId() employeeId: string | null,
@@ -33,7 +38,8 @@ export class DeviceRegistrationsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DEVICE_READ)
   async findAll(
     @Query() query: QueryDeviceRegistrationDto,
     @CurrentCompany('id') companyId: string,
@@ -42,13 +48,15 @@ export class DeviceRegistrationsController {
   }
 
   @Get('me')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.DEVICE_READ)
   async findMyDevices(@CurrentEmployeeId() employeeId: string | null) {
     return this.service.findMyDevices(employeeId!);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DEVICE_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -57,7 +65,8 @@ export class DeviceRegistrationsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DEVICE_UPDATE)
   async update(
     @Param('id') id: string,
     @Body() dto: Partial<CreateDeviceRegistrationDto>,
@@ -67,7 +76,8 @@ export class DeviceRegistrationsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DEVICE_UPDATE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

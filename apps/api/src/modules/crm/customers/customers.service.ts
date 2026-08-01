@@ -34,8 +34,8 @@ export class CustomersService {
         createdById: employee?.id ?? null,
       },
       include: {
-        createdBy: {
-          include: { user: true },
+        employees: {
+          include: { users: true },
         },
       },
     });
@@ -77,8 +77,8 @@ export class CustomersService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          createdBy: {
-            include: { user: true },
+          employees: {
+            include: { users: true },
           },
         },
       }),
@@ -100,8 +100,8 @@ export class CustomersService {
     const customer = await this.prisma.customer.findFirst({
       where: { id, companyId },
       include: {
-        createdBy: {
-          include: { user: true },
+        employees: {
+          include: { users: true },
         },
         leads: true,
         siteVisits: true,
@@ -123,8 +123,8 @@ export class CustomersService {
       where: { id },
       data: dto,
       include: {
-        createdBy: {
-          include: { user: true },
+        employees: {
+          include: { users: true },
         },
       },
     });
@@ -134,7 +134,8 @@ export class CustomersService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.customer.delete({ where: { id } });
+    await this.prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
     this.eventEmitter.emit('customer.deleted', { companyId, entityId: id });
+    return { success: true };
   }
 }

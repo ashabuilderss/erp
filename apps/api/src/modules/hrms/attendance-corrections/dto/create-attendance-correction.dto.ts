@@ -1,6 +1,5 @@
-import { IsString, IsOptional, IsDateString, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AttendanceStatus } from '@prisma/client';
 
 export class CreateAttendanceCorrectionDto {
   @ApiPropertyOptional()
@@ -26,8 +25,7 @@ export class CreateAttendanceCorrectionDto {
   @IsString()
   requestedCheckOut?: string;
 
-  @ApiPropertyOptional({ enum: AttendanceStatus })
+  @ApiPropertyOptional({ enum: ['COMPLETED', 'UNDER_REVIEW'] })
   @IsOptional()
-  @IsEnum(AttendanceStatus)
-  requestedStatus?: AttendanceStatus;
+  requestedStatus?: string;
 }

@@ -39,7 +39,11 @@ export class ConstructionService {
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
-          select: { phases: true, labourEntries: true, progressPhotos: true },
+          select: {
+            sitePhases: true,
+            labourEntries: true,
+            progressPhotos: true,
+          },
         },
       },
     });
@@ -58,7 +62,7 @@ export class ConstructionService {
     const site = await this.prisma.constructionSite.findFirst({
       where: { id, companyId },
       include: {
-        phases: { orderBy: { sortOrder: 'asc' } },
+        sitePhases: { orderBy: { sortOrder: 'asc' } },
         progressPhotos: { orderBy: { takenAt: 'desc' }, take: 10 },
       },
     });
@@ -81,7 +85,7 @@ export class ConstructionService {
 
   async deleteSite(id: string, companyId: string) {
     await this.findOneSite(id, companyId);
-    return this.prisma.constructionSite.delete({ where: { id } });
+    return this.prisma.constructionSite.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   // --- Phases ---
@@ -99,7 +103,7 @@ export class ConstructionService {
 
   async updatePhase(id: string, dto: any, companyId: string) {
     const phase = await this.prisma.sitePhase.findFirst({
-      where: { id, site: { companyId } },
+      where: { id, constructionSites: { companyId } },
     });
     if (!phase) throw new NotFoundException('Phase not found');
     return this.prisma.sitePhase.update({
@@ -114,15 +118,18 @@ export class ConstructionService {
 
   async deletePhase(id: string, companyId: string) {
     const phase = await this.prisma.sitePhase.findFirst({
-      where: { id, site: { companyId } },
+      where: { id, constructionSites: { companyId } },
     });
     if (!phase) throw new NotFoundException('Phase not found');
-    return this.prisma.sitePhase.delete({ where: { id } });
+    return this.prisma.sitePhase.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   // --- Vendors ---
   async createVendor(dto: any, companyId: string) {
-    return this.prisma.vendor.create({ data: { ...dto, companyId } });
+    const { name, contactPerson, phone, email, address, gstin, status } = dto;
+    return this.prisma.vendor.create({
+      data: { name, contactPerson, phone, email, address, gstin, status, companyId },
+    });
   }
 
   async findAllVendors(query: any, companyId: string) {
@@ -165,18 +172,22 @@ export class ConstructionService {
 
   async deleteVendor(id: string, companyId: string) {
     await this.findOneVendor(id, companyId);
-    return this.prisma.vendor.delete({ where: { id } });
+    return this.prisma.vendor.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   // --- Materials ---
   async createMaterial(dto: any, companyId: string) {
+    const { name, category, unit, unitPrice } = dto;
+    await this.prisma.material.deleteMany({
+      where: { companyId, name, deletedAt: { not: null } },
+    });
     return this.prisma.material.create({
-      data: { ...dto, companyId, unitPrice: dto.unitPrice ?? undefined },
+      data: { name, category, unit, unitPrice, companyId },
     });
   }
 
   async findAllMaterials(query: any, companyId: string) {
-    const where: Prisma.MaterialWhereInput = { companyId };
+    const where: Prisma.MaterialWhereInput = { companyId, deletedAt: null };
     if (query.category) where.category = query.category;
     if (query.search)
       where.OR = [
@@ -217,7 +228,7 @@ export class ConstructionService {
       where: { id, companyId },
     });
     if (!mat) throw new NotFoundException('Material not found');
-    return this.prisma.material.delete({ where: { id } });
+    return this.prisma.material.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   // --- Material Inward ---
@@ -233,7 +244,11 @@ export class ConstructionService {
     });
     await this.prisma.inventoryItem.upsert({
       where: {
-        companyId_siteId_materialId: { companyId, siteId: dto.siteId, materialId: dto.materialId },
+        companyId_siteId_materialId: {
+          companyId,
+          siteId: dto.siteId,
+          materialId: dto.materialId,
+        },
       },
       update: { quantityOnHand: { increment: dto.quantity } },
       create: {
@@ -257,9 +272,9 @@ export class ConstructionService {
       take: query.limit ?? 10,
       orderBy: { receivedDate: 'desc' },
       include: {
-        vendor: { select: { name: true } },
-        site: { select: { name: true } },
-        material: { select: { name: true, unit: true } },
+        vendors: { select: { name: true } },
+        constructionSites: { select: { name: true } },
+        materials: { select: { name: true, unit: true } },
       },
     });
     return {
@@ -282,7 +297,8 @@ export class ConstructionService {
     const updateData: any = { ...dto };
     if (dto.receivedDate) updateData.receivedDate = new Date(dto.receivedDate);
     if (dto.quantity && dto.unitPrice) {
-      updateData.totalAmount = Math.round(dto.quantity * dto.unitPrice * 100) / 100;
+      updateData.totalAmount =
+        Math.round(dto.quantity * dto.unitPrice * 100) / 100;
     }
 
     const result = await this.prisma.materialInward.update({
@@ -295,7 +311,11 @@ export class ConstructionService {
     if (quantityDiff !== 0) {
       await this.prisma.inventoryItem.upsert({
         where: {
-          companyId_siteId_materialId: { companyId, siteId: entry.siteId, materialId: entry.materialId },
+          companyId_siteId_materialId: {
+            companyId,
+            siteId: entry.siteId,
+            materialId: entry.materialId,
+          },
         },
         update: { quantityOnHand: { increment: quantityDiff } },
         create: {
@@ -316,12 +336,16 @@ export class ConstructionService {
     });
     if (!entry) throw new NotFoundException('Material inward entry not found');
 
-    await this.prisma.materialInward.delete({ where: { id } });
+    await this.prisma.materialInward.update({ where: { id }, data: { deletedAt: new Date() } });
 
     const prevQty = Number(entry.quantity);
     await this.prisma.inventoryItem.upsert({
       where: {
-        companyId_siteId_materialId: { companyId, siteId: entry.siteId, materialId: entry.materialId },
+        companyId_siteId_materialId: {
+          companyId,
+          siteId: entry.siteId,
+          materialId: entry.materialId,
+        },
       },
       update: { quantityOnHand: { decrement: prevQty } },
       create: {
@@ -341,8 +365,8 @@ export class ConstructionService {
       where,
       orderBy: { lastUpdated: 'desc' },
       include: {
-        site: { select: { name: true } },
-        material: { select: { name: true, unit: true, category: true } },
+        constructionSites: { select: { name: true } },
+        materials: { select: { name: true, unit: true, category: true } },
       },
     });
     return data;
@@ -370,7 +394,7 @@ export class ConstructionService {
       skip: ((query.page ?? 1) - 1) * (query.limit ?? 10),
       take: query.limit ?? 10,
       orderBy: { date: 'desc' },
-      include: { site: { select: { name: true } } },
+      include: { constructionSites: { select: { name: true } } },
     });
     return {
       data,
@@ -388,7 +412,144 @@ export class ConstructionService {
       where: { id, companyId },
     });
     if (!entry) throw new NotFoundException('Labour entry not found');
-    return this.prisma.labourEntry.delete({ where: { id } });
+    return this.prisma.labourEntry.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  // --- Material Consumption ---
+  async createConsumption(dto: any, companyId: string, userId: string) {
+    const material = await this.prisma.material.findFirst({
+      where: { id: dto.materialId, companyId, deletedAt: null },
+    });
+    if (!material) throw new NotFoundException('Material not found');
+
+    const site = await this.prisma.constructionSite.findFirst({
+      where: { id: dto.siteId, companyId, deletedAt: null },
+    });
+    if (!site) throw new NotFoundException('Construction site not found');
+
+    if (dto.phaseId) {
+      const phase = await this.prisma.sitePhase.findFirst({
+        where: { id: dto.phaseId, siteId: dto.siteId, deletedAt: null },
+      });
+      if (!phase) throw new NotFoundException('Phase not found');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const consumption = await tx.materialConsumption.create({
+        data: {
+          companyId,
+          siteId: dto.siteId,
+          phaseId: dto.phaseId ?? null,
+          materialId: dto.materialId,
+          quantity: dto.quantity,
+          consumedDate: new Date(dto.consumedDate),
+          notes: dto.notes ?? null,
+        },
+      });
+
+      const inventoryItem = await tx.inventoryItem.findFirst({
+        where: {
+          companyId,
+          siteId: dto.siteId,
+          materialId: dto.materialId,
+          deletedAt: null,
+        },
+      });
+
+      if (inventoryItem) {
+        const currentQty = Number(inventoryItem.quantityOnHand);
+        if (currentQty < dto.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock. Available: ${currentQty}, Required: ${dto.quantity}`,
+          );
+        }
+
+        await tx.inventoryItem.update({
+          where: { id: inventoryItem.id },
+          data: {
+            quantityOnHand: { decrement: dto.quantity },
+            lastUpdated: new Date(),
+          },
+        });
+
+        await tx.inventoryTransaction.create({
+          data: {
+            itemId: inventoryItem.id,
+            companyId,
+            type: 'OUTWARD',
+            quantity: dto.quantity,
+            date: new Date(dto.consumedDate),
+            recordedById: userId,
+          },
+        });
+      }
+
+      return consumption;
+    });
+  }
+
+  async findAllConsumptions(query: any, companyId: string) {
+    const where: Prisma.MaterialConsumptionWhereInput = { companyId };
+    if (query.siteId) where.siteId = query.siteId;
+    if (query.materialId) where.materialId = query.materialId;
+    if (query.phaseId) where.phaseId = query.phaseId;
+
+    const total = await this.prisma.materialConsumption.count({ where });
+    const data = await this.prisma.materialConsumption.findMany({
+      where,
+      skip: ((query.page ?? 1) - 1) * (query.limit ?? 10),
+      take: query.limit ?? 10,
+      orderBy: { consumedDate: 'desc' },
+      include: {
+        constructionSites: { select: { name: true } },
+        sitePhases: { select: { name: true } },
+        materials: { select: { name: true, unit: true } },
+      },
+    });
+    return {
+      data,
+      meta: {
+        total,
+        page: query.page ?? 1,
+        limit: query.limit ?? 10,
+        totalPages: Math.ceil(total / (query.limit ?? 10)),
+      },
+    };
+  }
+
+  async deleteConsumption(id: string, companyId: string) {
+    const consumption = await this.prisma.materialConsumption.findFirst({
+      where: { id, companyId },
+    });
+    if (!consumption) throw new NotFoundException('Consumption record not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.materialConsumption.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+
+      const inventoryItem = await tx.inventoryItem.findFirst({
+        where: {
+          companyId,
+          siteId: consumption.siteId,
+          materialId: consumption.materialId,
+          deletedAt: null,
+        },
+      });
+
+      if (inventoryItem) {
+        await tx.inventoryItem.update({
+          where: { id: inventoryItem.id },
+          data: {
+            quantityOnHand: { increment: consumption.quantity },
+            lastUpdated: new Date(),
+          },
+        });
+      }
+
+      return consumption;
+    });
   }
 
   // --- Progress Photos ---
@@ -407,7 +568,7 @@ export class ConstructionService {
     return this.prisma.progressPhoto.findMany({
       where: { siteId, companyId },
       orderBy: { takenAt: 'desc' },
-      include: { phase: { select: { name: true } } },
+      include: { sitePhases: { select: { name: true } } },
     });
   }
 
@@ -416,6 +577,6 @@ export class ConstructionService {
       where: { id, companyId },
     });
     if (!photo) throw new NotFoundException('Photo not found');
-    return this.prisma.progressPhoto.delete({ where: { id } });
+    return this.prisma.progressPhoto.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }

@@ -10,30 +10,14 @@ export async function resetDatabase(prisma: PrismaService): Promise<void> {
     throw new Error('Refusing to reset database outside the test environment');
   }
 
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE
-      "activity_logs",
-      "notifications",
-      "employee_assignments",
-      "performance",
-      "leave_allocations",
-      "leave_requests",
-      "attendance",
-      "bookings",
-      "site_visits",
-      "customers",
-      "task_comments",
-      "attendance_corrections",
-      "leads",
-      "properties",
-      "refresh_tokens",
-      "employees",
-      "designations",
-      "departments",
-      "users",
-      "companies"
-    RESTART IDENTITY CASCADE;
-  `);
+  const tables = await prisma.$queryRawUnsafe<{ tablename: string }[]>(
+    `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != '_prisma_migrations'`,
+  );
+  const tablesInOrder = tables.map((t) => `"${t.tablename}"`);
+
+  await prisma.$queryRawUnsafe(
+    `TRUNCATE TABLE ${tablesInOrder.join(', ')} RESTART IDENTITY CASCADE`,
+  );
 }
 
 export async function createCompanyFixture(
@@ -79,12 +63,68 @@ export async function createCompanyFixture(
     },
   });
 
+  const shift = await prisma.shiftDefinition.create({
+    data: {
+      companyId: company.id,
+      name: 'Default Shift',
+      startTime: '09:00',
+      endTime: '18:00',
+      gracePeriodMinutes: 15,
+      isActive: true,
+    },
+  });
+
+  const approverRole = await prisma.role.create({
+    data: {
+      companyId: company.id,
+      name: 'Attendance Approver',
+      isSystem: false,
+    },
+  });
+
+  const attendanceCorrectionTemplate = await prisma.approvalTemplate.create({
+    data: {
+      companyId: company.id,
+      entityType: 'AttendanceCorrection',
+      description: 'Attendance correction approval',
+    },
+  });
+
+  await prisma.approvalTemplateStep.create({
+    data: {
+      templateId: attendanceCorrectionTemplate.id,
+      companyId: company.id,
+      sequence: 1,
+      requiredRoleId: approverRole.id,
+      slaHours: 24,
+    },
+  });
+
+  const warningApprovalTemplate = await prisma.approvalTemplate.create({
+    data: {
+      companyId: company.id,
+      entityType: 'WARNING_APPROVAL',
+      description: 'Warning approval',
+    },
+  });
+
+  await prisma.approvalTemplateStep.create({
+    data: {
+      templateId: warningApprovalTemplate.id,
+      companyId: company.id,
+      sequence: 1,
+      requiredRoleId: approverRole.id,
+      slaHours: 24,
+    },
+  });
+
   return {
     company,
     department,
     designation,
     user,
     employee,
+    shift,
     password: 'Password@123',
   };
 }

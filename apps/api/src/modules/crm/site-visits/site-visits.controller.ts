@@ -12,6 +12,7 @@ import { SiteVisitsService } from './site-visits.service';
 import { CreateSiteVisitDto } from './dto/create-site-visit.dto';
 import { UpdateSiteVisitDto } from './dto/update-site-visit.dto';
 import { QuerySiteVisitDto } from './dto/query-site-visit.dto';
+import { UpdateSiteVisitStatusDto } from './dto/update-site-visit-status.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import {
   CurrentCompany,
@@ -21,13 +22,16 @@ import {
 import { UserRole, SiteVisitStatus } from '@prisma/client';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Permissions } from '../../../common/auth/permissions';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
+import { getScopedEmployeeId } from '../../../common/utils/role-scope.util';
 
 @Controller('site-visits')
 export class SiteVisitsController {
   constructor(private readonly siteVisitsService: SiteVisitsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.SITE_VISIT_CREATE)
   async create(
     @Body() dto: CreateSiteVisitDto,
@@ -35,11 +39,16 @@ export class SiteVisitsController {
     @CurrentUser('role') role: string,
     @CurrentEmployeeId() employeeId: string | null,
   ) {
-    return this.siteVisitsService.create(dto, companyId, role, employeeId ?? undefined);
+    return this.siteVisitsService.create(
+      dto,
+      companyId,
+      role,
+      employeeId ?? undefined,
+    );
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.SITE_VISIT_READ)
   async findAll(
     @Query() query: QuerySiteVisitDto,
@@ -50,12 +59,12 @@ export class SiteVisitsController {
     return this.siteVisitsService.findAll(
       query,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
     );
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.SITE_VISIT_READ)
   async findOne(
     @Param('id') id: string,
@@ -63,11 +72,15 @@ export class SiteVisitsController {
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentUser('role') role: string,
   ) {
-    return this.siteVisitsService.findOne(id, companyId, role === 'EMPLOYEE' ? employeeId! : undefined);
+    return this.siteVisitsService.findOne(
+      id,
+      companyId,
+      getScopedEmployeeId(role, employeeId),
+    );
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.SITE_VISIT_UPDATE)
   async update(
     @Param('id') id: string,
@@ -76,24 +89,31 @@ export class SiteVisitsController {
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentUser('role') role: string,
   ) {
-    return this.siteVisitsService.update(id, dto, companyId, role === 'EMPLOYEE' ? employeeId! : undefined, role, employeeId ?? undefined);
+    return this.siteVisitsService.update(
+      id,
+      dto,
+      companyId,
+      getScopedEmployeeId(role, employeeId),
+      role,
+      employeeId ?? undefined,
+    );
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.FIELD_EMPLOYEE)
   @RequirePermissions(Permissions.SITE_VISIT_UPDATE)
   async updateStatus(
     @Param('id') id: string,
-    @Body('status') status: string,
+    @Body() dto: UpdateSiteVisitStatusDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentUser('role') role: string,
   ) {
     return this.siteVisitsService.updateStatus(
       id,
-      status as SiteVisitStatus,
+      dto.status,
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
+      getScopedEmployeeId(role, employeeId),
       role,
       employeeId ?? undefined,
     );

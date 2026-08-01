@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useSites, useSite, useCreateSite, useUpdateSite, useDeleteSite, useCreatePhase, useUpdatePhase, useDeletePhase, useSitePhotos, useCreateProgressPhoto, useDeleteProgressPhoto } from "@/hooks/api";
 import { useCurrentUser } from "@/hooks/api";
 import { useToast } from "@/components/ui/toast";
-import { PhotoGallery } from "@/components/construction/photo-gallery";
+import { ProgressPhotoGallery } from "./ProgressPhotoGallery";
 import { TableSkeleton, CardSkeleton } from "@/components/ui/skeleton-variants";
 import type { ConstructionSite, SitePhase, ProgressPhoto, CreateSiteDto, SiteStatus, SitePhaseStatus } from "@/lib/types";
 import { format } from "date-fns";
@@ -123,7 +123,7 @@ function PhaseForm({ form, setForm }: { form: { name: string; startDate: string;
   );
 }
 
-function SiteDetails({ site, onClose }: { site: ConstructionSite; onClose: () => void }) {
+function SiteDetails({ site, onClose, canManage }: { site: ConstructionSite; onClose: () => void; canManage?: boolean }) {
   const { showToast } = useToast();
   const { data: siteWithDetails } = useSite(site.id);
   const { data: photos } = useSitePhotos(site.id);
@@ -192,6 +192,7 @@ function SiteDetails({ site, onClose }: { site: ConstructionSite; onClose: () =>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Phases</CardTitle>
+            {canManage && (
             <Dialog open={addPhaseOpen} onOpenChange={(o) => { setAddPhaseOpen(o); if (!o) resetPhaseForm(); }}>
               <DialogTrigger render={<Button size="sm" />}><Plus className="h-4 w-4" /> Add Phase</DialogTrigger>
               <DialogContent className="sm:max-w-sm">
@@ -202,6 +203,7 @@ function SiteDetails({ site, onClose }: { site: ConstructionSite; onClose: () =>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -219,6 +221,7 @@ function SiteDetails({ site, onClose }: { site: ConstructionSite; onClose: () =>
                       <Badge variant="outline" className={phaseStatusColors[phase.status]}>{phase.status}</Badge>
                     </div>
                   </div>
+                  {canManage && (
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon-sm" onClick={() => {
                       setEditPhase(phase);
@@ -226,6 +229,7 @@ function SiteDetails({ site, onClose }: { site: ConstructionSite; onClose: () =>
                     }}><Pencil className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon-sm" onClick={() => handleDeletePhase(phase.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -247,16 +251,18 @@ function SiteDetails({ site, onClose }: { site: ConstructionSite; onClose: () =>
         <CardHeader><CardTitle>Progress Photos</CardTitle></CardHeader>
         <CardContent className="space-y-6">
           {/* Upload form */}
+          {canManage && (
           <div className="flex gap-2">
             <Input placeholder="Photo URL" value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} className="flex-1" />
             <Input placeholder="Caption (optional)" value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} className="flex-1" />
             <Button onClick={handleAddPhoto} disabled={!photoUrl || createPhoto.isPending}><Plus className="h-4 w-4" /></Button>
           </div>
+          )}
 
           {/* Photo gallery with lightbox, timeline, phase filter, and grid/timeline toggle */}
-          <PhotoGallery
+          <ProgressPhotoGallery
             photos={progressPhotos}
-            onDelete={handleDeletePhoto}
+            onDelete={canManage ? handleDeletePhoto : undefined}
           />
         </CardContent>
       </Card>
@@ -309,7 +315,7 @@ function EmployeeConstructionSitesView() {
   const sites = data?.data || [];
 
   if (selectedSite) {
-    return <SiteDetails site={selectedSite} onClose={() => setSelectedSite(null)} />;
+    return <SiteDetails site={selectedSite} onClose={() => setSelectedSite(null)} canManage={false} />;
   }
 
   return (
@@ -355,6 +361,7 @@ function EmployeeConstructionSitesView() {
 function AdminConstructionSitesView() {
   const { showToast } = useToast();
   const { data, isLoading } = useSites();
+  const { data: currentUser } = useCurrentUser();
   const createMutation = useCreateSite();
   const updateMutation = useUpdateSite();
   const deleteMutation = useDeleteSite();
@@ -364,6 +371,7 @@ function AdminConstructionSitesView() {
   const [form, setForm] = useState<Partial<CreateSiteDto>>({});
   const [confirmSiteDelete, setConfirmSiteDelete] = useState<string | null>(null);
   const sites = data?.data || [];
+  const canManage = currentUser?.user?.role === "OWNER" || currentUser?.user?.role === "ADMIN";
 
   const resetForm = () => setForm({ name: "", location: "", status: "PLANNING", startDate: "", endDate: "", budget: undefined, description: "" });
 
@@ -372,7 +380,7 @@ function AdminConstructionSitesView() {
   };
 
   if (selectedSite) {
-    return <SiteDetails site={selectedSite} onClose={() => setSelectedSite(null)} />;
+    return <SiteDetails site={selectedSite} onClose={() => setSelectedSite(null)} canManage={canManage} />;
   }
 
   return (
@@ -382,15 +390,25 @@ function AdminConstructionSitesView() {
           <h2 className="text-2xl font-semibold">Construction Sites</h2>
           <p className="text-sm text-muted-foreground">Manage construction sites, phases, and progress</p>
         </div>
-        <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) resetForm(); }}>
-          <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Site</DialogTrigger>
+        {canManage && (
+          <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) resetForm(); }}>
+            <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Site</DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader><DialogTitle>Add Construction Site</DialogTitle></DialogHeader>
             <SiteForm form={form} setForm={setForm} />
             <DialogFooter showCloseButton>
               <Button onClick={() => {
                 if (!form.name || !form.location) return;
-                createMutation.mutate(form as CreateSiteDto, {
+                const dto: CreateSiteDto = {
+                  name: form.name,
+                  location: form.location,
+                  status: form.status || "PLANNING",
+                  description: form.description || undefined,
+                  startDate: form.startDate || undefined,
+                  endDate: form.endDate || undefined,
+                  budget: form.budget != null ? Number(form.budget) || undefined : undefined,
+                };
+                createMutation.mutate(dto, {
                   onSuccess: () => { showToast("Site created"); setCreateOpen(false); resetForm(); },
                   onError: (err: Error) => showToast(err.message || "Failed to create site", "error"),
                 });
@@ -398,6 +416,7 @@ function AdminConstructionSitesView() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Card>
@@ -439,11 +458,15 @@ function AdminConstructionSitesView() {
                       <td className="p-3">
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="icon-sm" onClick={() => setSelectedSite(site)}><Eye className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon-sm" onClick={() => {
-                            setEditItem(site);
-                            setForm({ name: site.name, location: site.location, status: site.status, startDate: site.startDate || "", endDate: site.endDate || "", budget: site.budget ?? undefined, description: site.description || "" });
-                          }}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(site.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                          {canManage && (
+                            <>
+                              <Button variant="ghost" size="icon-sm" onClick={() => {
+                                setEditItem(site);
+                                setForm({ name: site.name, location: site.location, status: site.status, startDate: site.startDate || "", endDate: site.endDate || "", budget: site.budget ?? undefined, description: site.description || "" });
+                              }}><Pencil className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(site.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -462,7 +485,16 @@ function AdminConstructionSitesView() {
           <DialogFooter showCloseButton>
             <Button onClick={() => {
               if (editItem) {
-                updateMutation.mutate({ id: editItem.id, dto: form }, {
+                const dto: Partial<CreateSiteDto> = {
+                  name: form.name,
+                  location: form.location,
+                  status: form.status,
+                  description: form.description || undefined,
+                  startDate: form.startDate || undefined,
+                  endDate: form.endDate || undefined,
+                  budget: form.budget != null ? Number(form.budget) || undefined : undefined,
+                };
+                updateMutation.mutate({ id: editItem.id, dto }, {
                   onSuccess: () => { showToast("Site updated"); setEditItem(null); },
                   onError: (err: Error) => showToast(err.message || "Failed to update site", "error"),
                 });

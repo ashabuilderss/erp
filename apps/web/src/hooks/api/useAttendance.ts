@@ -48,7 +48,7 @@ export function useCreateAttendance() {
         date: dto.date,
         checkIn: dto.checkIn ?? null,
         checkOut: dto.checkOut ?? null,
-        status: dto.status ?? "PRESENT",
+        status: dto.status ?? "UNDER_REVIEW",
         companyId: "",
         verified: false,
         verifiedById: null,
@@ -128,10 +128,14 @@ export function useDeleteAttendance() {
   });
 }
 
+
 export function useCheckIn() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body?: { latitude?: number; longitude?: number; checkInPhoto?: string }) => api.post<CheckInResponse>("/attendance/me/check-in", body ?? {}),
+    mutationFn: async (body: { latitude?: number; longitude?: number; checkInPhoto?: string }) => {
+      const { nonce } = await api.get<{ nonce: string }>("/attendance/nonce/generate");
+      return api.post<CheckInResponse>("/attendance/me/check-in", { ...body, nonce });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["attendance", "me"] });
       queryClient.invalidateQueries({ queryKey: ["attendance", "today"] });
@@ -144,7 +148,10 @@ export function useCheckIn() {
 export function useCheckOut() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body?: { latitude?: number; longitude?: number; checkOutPhoto?: string }) => api.post<CheckOutResponse>("/attendance/me/check-out", body ?? {}),
+    mutationFn: async (body: { latitude?: number; longitude?: number; checkOutPhoto?: string }) => {
+      const { nonce } = await api.get<{ nonce: string }>("/attendance/nonce/generate");
+      return api.post<CheckOutResponse>("/attendance/me/check-out", { ...body, nonce });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["attendance", "me"] });
       queryClient.invalidateQueries({ queryKey: ["attendance", "today"] });

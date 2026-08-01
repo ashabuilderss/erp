@@ -12,23 +12,32 @@ import { LeadsService } from './leads.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { QueryLeadDto } from './dto/query-lead.dto';
+import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import {
   CurrentCompany,
   CurrentEmployeeId,
   CurrentUser,
 } from '../../../common/decorators/current-user.decorator';
-import { UserRole, LeadStatus } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { CacheInvalidateExtra } from '../../../common/decorators/cache.decorators';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Permissions } from '../../../common/auth/permissions';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
+import { getEffectiveScopeFilter } from '../../../common/utils/scope-helper.util';
 
 @Controller('leads')
 export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
 
   @Get('me')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.MANAGER,
+    UserRole.FIELD_EMPLOYEE,
+  )
   @RequirePermissions(Permissions.LEAD_READ)
   async getMyLeads(
     @CurrentEmployeeId() employeeId: string | null,
@@ -38,7 +47,14 @@ export class LeadsController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.MANAGER,
+    UserRole.FIELD_EMPLOYEE,
+  )
   @RequirePermissions(Permissions.LEAD_CREATE)
   async create(
     @Body() dto: CreateLeadDto,
@@ -46,78 +62,167 @@ export class LeadsController {
     @CurrentUser('role') role: string,
     @CurrentEmployeeId() employeeId: string | null,
   ) {
-    return this.leadsService.create(dto, companyId, role, employeeId ?? undefined);
+    return this.leadsService.create(
+      dto,
+      companyId,
+      role,
+      employeeId ?? undefined,
+    );
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.MANAGER,
+    UserRole.FIELD_EMPLOYEE,
+  )
   @RequirePermissions(Permissions.LEAD_READ)
   async findAll(
     @Query() query: QueryLeadDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
-    @CurrentUser('role') role: string,
+    @CurrentUser('scopes') scopes: Record<string, string>,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.leadsService.findAll(
-      query,
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.LEAD_READ, {
       companyId,
-      role === 'EMPLOYEE' ? employeeId! : undefined,
-    );
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.leadsService.findAll(query, scopeFilter);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.MANAGER,
+    UserRole.FIELD_EMPLOYEE,
+  )
   @RequirePermissions(Permissions.LEAD_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
-    @CurrentUser('role') role: string,
+    @CurrentUser('scopes') scopes: Record<string, string>,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.leadsService.findOne(id, companyId, role === 'EMPLOYEE' ? employeeId! : undefined);
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.LEAD_READ, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.leadsService.findOne(id, scopeFilter);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.MANAGER,
+    UserRole.FIELD_EMPLOYEE,
+  )
   @RequirePermissions(Permissions.LEAD_UPDATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateLeadDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
+    @CurrentUser('scopes') scopes: Record<string, string>,
     @CurrentUser('role') role: string,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.leadsService.update(id, dto, companyId, role === 'EMPLOYEE' ? employeeId! : undefined, role, employeeId ?? undefined);
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.LEAD_UPDATE, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.leadsService.update(
+      id,
+      dto,
+      companyId,
+      scopeFilter,
+      role,
+      employeeId ?? undefined,
+    );
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.MANAGER,
+    UserRole.FIELD_EMPLOYEE,
+  )
   @RequirePermissions(Permissions.LEAD_UPDATE)
   async updateStatus(
     @Param('id') id: string,
-    @Body('status') status: string,
+    @Body() dto: UpdateLeadStatusDto,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
+    @CurrentUser('scopes') scopes: Record<string, string>,
     @CurrentUser('role') role: string,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.leadsService.updateStatus(id, status as LeadStatus, companyId, role === 'EMPLOYEE' ? employeeId! : undefined, role, employeeId ?? undefined);
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.LEAD_UPDATE, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.leadsService.updateStatus(
+      id,
+      dto.status,
+      companyId,
+      scopeFilter,
+      role,
+      employeeId ?? undefined,
+      dto.lostReason,
+    );
   }
 
   @Post(':id/convert')
-  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.MANAGER,
+    UserRole.FIELD_EMPLOYEE,
+  )
   @RequirePermissions(Permissions.LEAD_CONVERT)
   @CacheInvalidateExtra(['leads', 'customers', 'properties'])
   async convertToCustomer(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
-    @CurrentUser('role') role: string,
+    @CurrentUser('scopes') scopes: Record<string, string>,
+    @CurrentUser('teamId') teamId: string | null,
+    @CurrentUser('departmentId') departmentId: string | null,
   ) {
-    return this.leadsService.convertToCustomer(id, companyId, role === 'EMPLOYEE' ? employeeId! : undefined);
+    const scopeFilter = getEffectiveScopeFilter(scopes, Permissions.LEAD_CONVERT, {
+      companyId,
+      employeeId,
+      teamId,
+      departmentId,
+    });
+    return this.leadsService.convertToCustomer(id, scopeFilter);
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
   @RequirePermissions(Permissions.LEAD_DELETE)
   async remove(
     @Param('id') id: string,

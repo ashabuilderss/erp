@@ -6,11 +6,6 @@ dist
 .env.*
 *.log
 coverage
-test
-tests
-__tests__
-*.spec.ts
-*.test.ts
 .vscode
 .idea
 .DS_Store

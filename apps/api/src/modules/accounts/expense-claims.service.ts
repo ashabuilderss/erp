@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import {
   CreateExpenseClaimDto,
@@ -17,8 +17,12 @@ export class ExpenseClaimsService {
       },
       orderBy: { createdAt: 'desc' },
       include: {
-        employee: { select: { employeeCode: true } },
-        approvedBy: { select: { employeeCode: true } },
+        employeesExpenseClaimsEmployeeIdToemployees: {
+          select: { employeeCode: true },
+        },
+        employeesExpenseClaimsApprovedByIdToemployees: {
+          select: { employeeCode: true },
+        },
       },
     });
   }
@@ -58,6 +62,11 @@ export class ExpenseClaimsService {
       where: { id, companyId },
     });
     if (!claim) throw new NotFoundException('Expense claim not found');
+
+    // Prevent self-approval
+    if (claim.employeeId === approvedById) {
+      throw new BadRequestException('Cannot approve your own expense claim');
+    }
 
     return this.prisma.expenseClaim.update({
       where: { id },

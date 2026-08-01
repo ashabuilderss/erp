@@ -17,7 +17,13 @@ export class DeviceRegistrationsService {
     companyId: string,
   ) {
     const existing = await this.prisma.deviceRegistration.findUnique({
-      where: { companyId_employeeId_deviceId: { companyId, employeeId, deviceId: dto.deviceId } },
+      where: {
+        companyId_employeeId_deviceId: {
+          companyId,
+          employeeId,
+          deviceId: dto.deviceId,
+        },
+      },
     });
     if (existing) {
       throw new ConflictException('Device already registered');
@@ -28,7 +34,7 @@ export class DeviceRegistrationsService {
         companyId,
         deviceName: dto.deviceName,
         deviceId: dto.deviceId,
-        isTrusted: dto.isTrusted ?? false,
+        isTrusted: false,
       },
     });
   }
@@ -47,8 +53,8 @@ export class DeviceRegistrationsService {
       skip: ((query.page ?? 1) - 1) * (query.limit ?? 10),
       take: query.limit ?? 10,
       include: {
-        employee: {
-          include: { user: { select: { firstName: true, lastName: true } } },
+        employees: {
+          include: { users: { select: { firstName: true, lastName: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -75,8 +81,8 @@ export class DeviceRegistrationsService {
     const device = await this.prisma.deviceRegistration.findFirst({
       where: { id, companyId },
       include: {
-        employee: {
-          include: { user: { select: { firstName: true, lastName: true } } },
+        employees: {
+          include: { users: { select: { firstName: true, lastName: true } } },
         },
       },
     });
@@ -95,6 +101,6 @@ export class DeviceRegistrationsService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    return this.prisma.deviceRegistration.delete({ where: { id } });
+    return this.prisma.deviceRegistration.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }

@@ -31,10 +31,10 @@ async function main() {
   
   const employees = await prisma.employee.findMany({ 
     where: { companyId: cid }, 
-    include: { user: { select: { email: true, role: true } } } 
+    include: { users: { select: { email: true, role: true } } } 
   });
   console.log('\nEmployees:');
-  employees.forEach(e => console.log('  ', e.employeeCode, '-', e.user?.email || 'NO USER', '-', e.user?.role));
+  employees.forEach(e => console.log('  ', e.employeeCode, '-', e.users?.email || 'NO USER', '-', e.users?.role));
   
   // Check property has assignedToEmployeeId
   const props = await prisma.property.findMany({ where: { companyId: cid }, select: { id: true, title: true, assignedToEmployeeId: true } });

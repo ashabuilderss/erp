@@ -55,7 +55,7 @@ export class AssignmentsService {
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         notes: dto.notes,
       },
-      include: { employee: { include: { user: true, department: true } } },
+      include: { employees: { include: { users: true, departments: true } } },
     });
   }
 
@@ -87,11 +87,13 @@ export class AssignmentsService {
       where.OR = [
         { notes: { contains: search, mode: 'insensitive' } },
         {
-          employee: { employeeCode: { contains: search, mode: 'insensitive' } },
+          employees: {
+            employeeCode: { contains: search, mode: 'insensitive' },
+          },
         },
         {
-          employee: {
-            user: { firstName: { contains: search, mode: 'insensitive' } },
+          employees: {
+            users: { firstName: { contains: search, mode: 'insensitive' } },
           },
         },
       ];
@@ -103,7 +105,7 @@ export class AssignmentsService {
         orderBy: { [safeSortBy(sortBy, ALLOWED_SORT, 'createdAt')]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
-        include: { employee: { include: { user: true, department: true } } },
+        include: { employees: { include: { users: true, departments: true } } },
       }),
       this.prisma.employeeAssignment.count({ where }),
     ]);
@@ -117,7 +119,7 @@ export class AssignmentsService {
   async findOne(id: string, companyId: string) {
     const assignment = await this.prisma.employeeAssignment.findFirst({
       where: { id, companyId },
-      include: { employee: { include: { user: true, department: true } } },
+      include: { employees: { include: { users: true, departments: true } } },
     });
     if (!assignment)
       throw new NotFoundException(`Assignment with ID ${id} not found`);
@@ -168,19 +170,19 @@ export class AssignmentsService {
     return this.prisma.employeeAssignment.update({
       where: { id },
       data,
-      include: { employee: { include: { user: true } } },
+      include: { employees: { include: { users: true } } },
     });
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    return this.prisma.employeeAssignment.delete({ where: { id } });
+    return this.prisma.employeeAssignment.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   async getAssignmentsByEmployee(employeeId: string, companyId: string) {
     return this.prisma.employeeAssignment.findMany({
       where: { employeeId, companyId },
-      include: { employee: { include: { user: true } } },
+      include: { employees: { include: { users: true } } },
     });
   }
 

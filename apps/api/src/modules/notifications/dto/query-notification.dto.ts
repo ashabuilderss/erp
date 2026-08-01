@@ -25,6 +25,11 @@ export class QueryNotificationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  acknowledged?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   type?: string;
 
   @ApiPropertyOptional()

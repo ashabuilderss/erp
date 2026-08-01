@@ -29,7 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      include: { employee: true, company: true },
+      include: { employees: true, companies: true },
     });
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -44,10 +44,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       lastName: user.lastName,
       role: user.role,
       companyId: user.companyId,
-      employeeId: user.employee?.id ?? null,
+      employeeId: user.employees?.id ?? null,
       isActive: user.isActive,
-      employee: user.employee,
-      company: user.company,
+      employee: user.employees,
+      company: user.companies,
     };
   }
 }

@@ -3,12 +3,10 @@ import {
   IsInt,
   Min,
   IsString,
-  IsEnum,
   IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { AttendanceStatus } from '@prisma/client';
 
 export class QueryAttendanceDto {
   @ApiPropertyOptional({ default: 1 })
@@ -30,10 +28,9 @@ export class QueryAttendanceDto {
   @IsString()
   employeeId?: string;
 
-  @ApiPropertyOptional({ enum: AttendanceStatus })
+  @ApiPropertyOptional({ enum: ['COMPLETED', 'UNDER_REVIEW'] })
   @IsOptional()
-  @IsEnum(AttendanceStatus)
-  status?: AttendanceStatus;
+  status?: string;
 
   @ApiPropertyOptional({ example: '2024-01-01' })
   @IsOptional()

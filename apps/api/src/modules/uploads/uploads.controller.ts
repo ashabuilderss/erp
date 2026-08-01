@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Delete,
   Param,
@@ -12,6 +13,8 @@ import {
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Permissions } from '../../common/auth/permissions';
 import { UserRole } from '@prisma/client';
 import {
   FilePolicyService,
@@ -25,6 +28,13 @@ export class UploadsController {
     private readonly filePolicyService: FilePolicyService,
     @Inject('STORAGE_PROVIDER') private readonly storage: StorageProvider,
   ) {}
+
+  @Get('policy')
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.FIELD_EMPLOYEE, UserRole.MANAGER, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.EMPLOYEE_READ)
+  getPolicy() {
+    return this.filePolicyService.getPolicy();
+  }
 
   @Post('avatar')
   @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
@@ -94,6 +104,44 @@ export class UploadsController {
         });
       }),
     );
+  }
+
+  @Post('attendance-selfie')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.HR_MANAGER,
+    UserRole.EMPLOYEE,
+    UserRole.FIELD_EMPLOYEE,
+  )
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      fileFilter: (_req, file, callback) => {
+        if (
+          !['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+        ) {
+          return callback(
+            new BadRequestException(
+              'Only JPG, PNG, and WebP images are allowed for attendance selfies',
+            ),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+      limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
+    }),
+  )
+  async uploadAttendanceSelfie(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Attendance selfie file is required');
+    this.filePolicyService.validate(file, true);
+    const result = await this.storage.upload({
+      buffer: file.buffer,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+    });
+    return result;
   }
 
   @Post('general')

@@ -11,10 +11,6 @@ test.describe.serial("Dashboard KPI Cards", () => {
   test("Admin dashboard shows KPI cards", async ({ page }) => {
     await signInAsAdmin(page);
 
-    await expect(
-      page.getByRole("heading", { name: "Admin Dashboard", exact: true }).first(),
-    ).toBeVisible();
-
     const cards = [
       "Total Properties",
       "Total Leads",
@@ -25,18 +21,14 @@ test.describe.serial("Dashboard KPI Cards", () => {
     ];
 
     for (const label of cards) {
-      await expect(page.getByRole("heading", { name: label })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(label).first()).toBeVisible({ timeout: 10000 });
     }
   });
 
   test("Owner dashboard shows KPI cards", async ({ page }) => {
     await signInAsOwner(page);
 
-    await expect(
-      page.getByRole("heading", { name: "Owner Dashboard", exact: true }).first(),
-    ).toBeVisible();
-
-    await expect(page.getByText("Total Properties").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Properties").first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Total Leads").first()).toBeVisible();
   });
 

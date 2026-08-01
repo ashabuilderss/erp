@@ -24,7 +24,11 @@ describe('RBAC e2e', () => {
 
   // HR Manager should NOT access CRM modules
   it('denies HR manager from accessing properties', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'hr', UserRole.HR_MANAGER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'hr',
+      UserRole.HR_MANAGER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/properties')
@@ -33,7 +37,11 @@ describe('RBAC e2e', () => {
   });
 
   it('denies HR manager from accessing leads', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'hr', UserRole.HR_MANAGER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'hr',
+      UserRole.HR_MANAGER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/leads')
@@ -42,7 +50,11 @@ describe('RBAC e2e', () => {
   });
 
   it('denies HR manager from accessing site visits', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'hr', UserRole.HR_MANAGER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'hr',
+      UserRole.HR_MANAGER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/site-visits')
@@ -51,7 +63,11 @@ describe('RBAC e2e', () => {
   });
 
   it('denies HR manager from accessing bookings', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'hr', UserRole.HR_MANAGER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'hr',
+      UserRole.HR_MANAGER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/bookings')
@@ -61,7 +77,11 @@ describe('RBAC e2e', () => {
 
   // Owner bypasses PermissionsGuard (SRS: "Full access across all modules")
   it('allows Owner to access properties', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'owner', UserRole.OWNER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'owner',
+      UserRole.OWNER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/properties')
@@ -70,7 +90,11 @@ describe('RBAC e2e', () => {
   });
 
   it('allows Owner to access leads', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'owner', UserRole.OWNER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'owner',
+      UserRole.OWNER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/leads')
@@ -79,7 +103,11 @@ describe('RBAC e2e', () => {
   });
 
   it('allows Owner to access site visits', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'owner', UserRole.OWNER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'owner',
+      UserRole.OWNER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/site-visits')
@@ -88,7 +116,11 @@ describe('RBAC e2e', () => {
   });
 
   it('allows Owner to access bookings', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'owner', UserRole.OWNER);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'owner',
+      UserRole.OWNER,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/bookings')
@@ -98,7 +130,11 @@ describe('RBAC e2e', () => {
 
   // Employee can access own CRM data
   it('allows Employee to access their own properties', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'emp', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'emp',
+      UserRole.EMPLOYEE,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/properties')
@@ -107,7 +143,11 @@ describe('RBAC e2e', () => {
   });
 
   it('allows Employee to access their own leads', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'emp', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'emp',
+      UserRole.EMPLOYEE,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/leads')
@@ -116,7 +156,11 @@ describe('RBAC e2e', () => {
   });
 
   it('allows Employee to access their own site visits', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'emp', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'emp',
+      UserRole.EMPLOYEE,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/site-visits')
@@ -125,7 +169,11 @@ describe('RBAC e2e', () => {
   });
 
   it('allows Employee to access their own bookings', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'emp', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'emp',
+      UserRole.EMPLOYEE,
+    );
     const token = await login(app, fixture.user.email, fixture.password);
     await request(app.getHttpServer())
       .get('/api/bookings')

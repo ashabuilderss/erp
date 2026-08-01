@@ -7,8 +7,8 @@ SELECT gen_random_uuid()::text, 'Default Company', 'default-company', true, NOW(
 WHERE NOT EXISTS (SELECT 1 FROM companies WHERE slug = 'default-company');
 
 -- Admin User (update clerkId for real Clerk users)
-INSERT INTO users (id, "clerkId", email, "companyId", "firstName", "lastName", role, "isActive", "createdAt", "updatedAt")
-SELECT gen_random_uuid()::text, 'user_3Ep0QU8XtVlzuljdN7c3fDq6VSH', 'admin@realestate.com', c.id, 'Admin', 'User', 'ADMIN', true, NOW(), NOW()
+INSERT INTO users (id, email, "companyId", "firstName", "lastName", role, "isActive", "createdAt", "updatedAt")
+SELECT gen_random_uuid()::text, 'admin@realestate.com', c.id, 'Admin', 'User', 'ADMIN', true, NOW(), NOW()
 FROM companies c WHERE c.slug = 'default-company'
 AND NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@realestate.com');
 

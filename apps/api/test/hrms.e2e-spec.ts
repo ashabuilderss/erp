@@ -34,7 +34,6 @@ describe('HRMS workflows e2e', () => {
         date: '2026-06-14',
         checkIn: '2026-06-14T09:30:00.000Z',
         checkOut: '2026-06-14T18:30:00.000Z',
-        status: 'PRESENT',
       })
       .expect(201);
 
@@ -46,13 +45,13 @@ describe('HRMS workflows e2e', () => {
       .send({
         employeeId: fixture.employee.id,
         year: 2026,
-        leaveType: 'CASUAL',
+        leaveType: 'MEDICAL',
         totalDays: 6,
       })
       .expect(201);
 
     expect(allocation.body.employeeId).toBe(fixture.employee.id);
-    expect(allocation.body.leaveType).toBe('CASUAL');
+    expect(allocation.body.leaveType).toBe('MEDICAL');
 
     const leaveRequest = await request(app.getHttpServer())
       .post('/api/leave-requests')
@@ -61,8 +60,9 @@ describe('HRMS workflows e2e', () => {
         employeeId: fixture.employee.id,
         startDate: '2026-06-20',
         endDate: '2026-06-21',
-        type: 'CASUAL',
+        type: 'MEDICAL',
         reason: 'Production readiness smoke leave',
+        documentUrl: 'https://example.com/medical-doc.pdf',
       })
       .expect(201);
 

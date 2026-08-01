@@ -11,6 +11,9 @@ import { UpdateSiteVisitDto } from './dto/update-site-visit.dto';
 import { QuerySiteVisitDto } from './dto/query-site-visit.dto';
 import { SiteVisitStatus, Prisma } from '@prisma/client';
 import { safeSortBy } from '../../../common/utils/sort-by';
+import { GovernanceEventPublisher } from '../../governance-events/governance-event.publisher';
+import { DomainEventTypes } from '../../governance-events/types/events';
+import { isOwnDataScope } from '../../../common/utils/role-scope.util';
 
 const ALLOWED_SORT = [
   'createdAt',
@@ -25,15 +28,23 @@ export class SiteVisitsService {
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
     private transitionService: TransitionService,
+    private governanceEventPublisher: GovernanceEventPublisher,
   ) {}
 
-  async create(dto: CreateSiteVisitDto, companyId: string, currentUserRole?: string, currentEmployeeId?: string) {
+  async create(
+    dto: CreateSiteVisitDto,
+    companyId: string,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
     if (dto.assignedToEmployeeId) {
       const assigned = await this.prisma.employee.findFirst({
         where: { id: dto.assignedToEmployeeId, companyId },
       });
       if (!assigned) {
-        throw new BadRequestException('Assigned employee not found in your company');
+        throw new BadRequestException(
+          'Assigned employee not found in your company',
+        );
       }
     }
 
@@ -60,26 +71,50 @@ export class SiteVisitsService {
       }
     }
 
-    if (currentUserRole === 'EMPLOYEE' && dto.assignedToEmployeeId !== currentEmployeeId) {
-      throw new BadRequestException('Employees can only create site visits assigned to themselves');
+    if (
+      isOwnDataScope(currentUserRole!) &&
+      dto.assignedToEmployeeId !== currentEmployeeId
+    ) {
+      throw new BadRequestException(
+        'Employees can only create site visits assigned to themselves',
+      );
     }
 
     const siteVisit = await this.prisma.$transaction(async (tx) => {
-      return tx.siteVisit.create({
+      const sv = await tx.siteVisit.create({
         data: {
           ...dto,
           companyId,
           scheduledDate: new Date(dto.scheduledDate),
         },
         include: {
-          property: true,
-          customer: true,
-          lead: true,
-          assignedTo: {
-            include: { user: true },
+          properties: true,
+          customers: true,
+          leads: true,
+          employees: {
+            include: { users: true },
           },
         },
       });
+
+      await this.governanceEventPublisher.publish(tx, {
+        eventType: DomainEventTypes.SITE_VISIT_SCHEDULED,
+        entityType: 'SiteVisit',
+        entityId: sv.id,
+        companyId,
+        payload: {
+          companyId,
+          userId: currentEmployeeId || 'system',
+          eventType: DomainEventTypes.SITE_VISIT_SCHEDULED,
+          metadata: {
+            siteVisitDate: sv.scheduledDate,
+            propertyTitle: sv.properties?.title,
+            customerName: sv.customers?.name,
+          },
+        },
+      });
+
+      return sv;
     });
     this.eventEmitter.emit('siteVisit.created', {
       companyId,
@@ -112,8 +147,8 @@ export class SiteVisitsService {
 
     if (search) {
       where.OR = [
-        { property: { title: { contains: search, mode: 'insensitive' } } },
-        { customer: { name: { contains: search, mode: 'insensitive' } } },
+        { properties: { title: { contains: search, mode: 'insensitive' } } },
+        { customers: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -142,11 +177,11 @@ export class SiteVisitsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          property: true,
-          customer: true,
-          lead: true,
-          assignedTo: {
-            include: { user: true },
+          properties: true,
+          customers: true,
+          leads: true,
+          employees: {
+            include: { users: true },
           },
         },
       }),
@@ -166,13 +201,17 @@ export class SiteVisitsService {
 
   async findOne(id: string, companyId: string, employeeId?: string) {
     const siteVisit = await this.prisma.siteVisit.findFirst({
-      where: { id, companyId, ...(employeeId && { assignedToEmployeeId: employeeId }) },
+      where: {
+        id,
+        companyId,
+        ...(employeeId && { assignedToEmployeeId: employeeId }),
+      },
       include: {
-        property: true,
-        customer: true,
-        lead: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        customers: true,
+        leads: true,
+        employees: {
+          include: { users: true },
         },
       },
     });
@@ -184,24 +223,39 @@ export class SiteVisitsService {
     return siteVisit;
   }
 
-  async update(id: string, dto: UpdateSiteVisitDto, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+  async update(
+    id: string,
+    dto: UpdateSiteVisitDto,
+    companyId: string,
+    employeeId?: string,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
     const existing = await this.findOne(id, companyId, employeeId);
 
-    if (dto.assignedToEmployeeId !== undefined && dto.assignedToEmployeeId !== existing.assignedToEmployeeId) {
+    if (
+      dto.assignedToEmployeeId !== undefined &&
+      dto.assignedToEmployeeId !== existing.assignedToEmployeeId
+    ) {
       if (dto.assignedToEmployeeId) {
         const assigned = await this.prisma.employee.findFirst({
           where: { id: dto.assignedToEmployeeId, companyId },
         });
         if (!assigned) {
-          throw new BadRequestException('Assigned employee not found in your company');
+          throw new BadRequestException(
+            'Assigned employee not found in your company',
+          );
         }
       }
-      if (currentUserRole === 'EMPLOYEE') {
+      if (isOwnDataScope(currentUserRole!)) {
         throw new BadRequestException('Employees cannot reassign site visits');
       }
     }
 
-    if (dto.propertyId !== undefined && dto.propertyId !== existing.propertyId) {
+    if (
+      dto.propertyId !== undefined &&
+      dto.propertyId !== existing.propertyId
+    ) {
       const property = await this.prisma.property.findFirst({
         where: { id: dto.propertyId, companyId },
       });
@@ -210,7 +264,10 @@ export class SiteVisitsService {
       }
     }
 
-    if (dto.customerId !== undefined && dto.customerId !== existing.customerId) {
+    if (
+      dto.customerId !== undefined &&
+      dto.customerId !== existing.customerId
+    ) {
       const customer = await this.prisma.customer.findFirst({
         where: { id: dto.customerId, companyId },
       });
@@ -238,11 +295,11 @@ export class SiteVisitsService {
       where: { id },
       data,
       include: {
-        property: true,
-        customer: true,
-        lead: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        customers: true,
+        leads: true,
+        employees: {
+          include: { users: true },
         },
       },
     });
@@ -250,7 +307,14 @@ export class SiteVisitsService {
     return updated;
   }
 
-  async updateStatus(id: string, status: SiteVisitStatus, companyId: string, employeeId?: string, currentUserRole?: string, currentEmployeeId?: string) {
+  async updateStatus(
+    id: string,
+    status: SiteVisitStatus,
+    companyId: string,
+    employeeId?: string,
+    currentUserRole?: string,
+    currentEmployeeId?: string,
+  ) {
     const updated = await this.transitionService.execute({
       entityType: 'SiteVisit',
       id,
@@ -258,12 +322,28 @@ export class SiteVisitsService {
       companyId,
       currentUserRole,
       currentEmployeeId,
+      before: async (tx) => {
+        if (status === 'COMPLETED') {
+          await this.governanceEventPublisher.publish(tx, {
+            eventType: DomainEventTypes.SITE_VISIT_COMPLETED,
+            entityType: 'SiteVisit',
+            entityId: id,
+            companyId,
+            payload: {
+              companyId,
+              userId: currentEmployeeId || 'system',
+              eventType: DomainEventTypes.SITE_VISIT_COMPLETED,
+              metadata: {},
+            },
+          });
+        }
+      },
       include: {
-        property: true,
-        customer: true,
-        lead: true,
-        assignedTo: {
-          include: { user: true },
+        properties: true,
+        customers: true,
+        leads: true,
+        employees: {
+          include: { users: true },
         },
       },
     });
@@ -273,7 +353,7 @@ export class SiteVisitsService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.siteVisit.delete({ where: { id } });
+    await this.prisma.siteVisit.update({ where: { id }, data: { deletedAt: new Date() } });
     this.eventEmitter.emit('siteVisit.deleted', { companyId, entityId: id });
   }
 }

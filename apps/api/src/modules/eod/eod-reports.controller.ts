@@ -12,39 +12,45 @@ import {
   CreateEodReportDto,
   UpdateEodReportDto,
 } from './dto/create-eod-report.dto';
+import { QueryEodReportDto } from './dto/query-eod-report.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Permissions } from '../../common/auth/permissions';
 import {
   CurrentCompany,
   CurrentEmployeeId,
 } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../common/decorators/idempotency.decorator';
 
 @Controller('eod-reports')
 export class EodReportsController {
   constructor(private readonly service: EodReportsService) {}
 
   @Get()
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER, UserRole.TEAM_LEAD)
+  @RequirePermissions(Permissions.EOD_READ)
   async findAll(
-    @Query('date') date: string | undefined,
-    @Query('employeeId') employeeId: string | undefined,
+    @Query() query: QueryEodReportDto,
     @CurrentCompany('id') companyId: string,
   ) {
-    return this.service.findAll(companyId, date, employeeId);
+    return this.service.findAll(companyId, query.date, query.employeeId);
   }
 
   @Get('my')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
+  @RequirePermissions(Permissions.EOD_READ)
   async findMy(
-    @Query('date') date: string | undefined,
+    @Query() query: QueryEodReportDto,
     @CurrentEmployeeId() employeeId: string,
     @CurrentCompany('id') companyId: string,
   ) {
-    return this.service.findByEmployee(employeeId, companyId, date);
+    return this.service.findByEmployee(employeeId, companyId, query.date);
   }
 
   @Get(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER, UserRole.TEAM_LEAD)
+  @RequirePermissions(Permissions.EOD_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -53,7 +59,9 @@ export class EodReportsController {
   }
 
   @Post()
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.FIELD_EMPLOYEE)
+  @RequirePermissions(Permissions.EOD_CREATE)
   async create(
     @Body() dto: CreateEodReportDto,
     @CurrentEmployeeId() employeeId: string,
@@ -63,7 +71,8 @@ export class EodReportsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.EOD_REVIEW)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateEodReportDto,
@@ -73,7 +82,8 @@ export class EodReportsController {
   }
 
   @Patch(':id/review')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.EOD_REVIEW)
   async review(
     @Param('id') id: string,
     @Body() dto: UpdateEodReportDto,

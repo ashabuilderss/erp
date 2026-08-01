@@ -9,10 +9,9 @@ export class AdvisoryLockService {
 
   async tryLock(key: number): Promise<boolean> {
     try {
-      const result = await this.prisma.$queryRawUnsafe<{ pg_try_advisory_lock: boolean }[]>(
-        'SELECT pg_try_advisory_lock($1)',
-        key,
-      );
+      const result = await this.prisma.$queryRawUnsafe<
+        { pg_try_advisory_lock: boolean }[]
+      >('SELECT pg_try_advisory_lock($1)', key);
       const acquired = result?.[0]?.pg_try_advisory_lock === true;
       if (acquired) {
         this.logger.debug(`Advisory lock acquired: ${key}`);
@@ -26,10 +25,7 @@ export class AdvisoryLockService {
 
   async unlock(key: number): Promise<void> {
     try {
-      await this.prisma.$queryRawUnsafe(
-        'SELECT pg_advisory_unlock($1)',
-        key,
-      );
+      await this.prisma.$queryRawUnsafe('SELECT pg_advisory_unlock($1)', key);
       this.logger.debug(`Advisory lock released: ${key}`);
     } catch (err) {
       this.logger.error(`Failed to release advisory lock ${key}: ${err}`);

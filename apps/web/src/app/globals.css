@@ -117,6 +117,19 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Smooth theme transitions (day <-> night) */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      transition-property: background-color, color;
+      transition-duration: 250ms;
+      transition-timing-function: ease;
+    }
+    body {
+      transition-property: background-color, color;
+      transition-duration: 250ms;
+      transition-timing-function: ease;
+    }
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--app-font-sans);

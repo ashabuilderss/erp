@@ -37,7 +37,8 @@ export default function LeaveRequestsPage() {
   const { data, isLoading } = useLeaveRequests(query);
   const { data: currentUser } = useCurrentUser();
   const role = currentUser?.user?.role || "EMPLOYEE";
-  const canApprove = role === "OWNER";
+  const canApprove = ["OWNER", "ADMIN", "HR_MANAGER"].includes(role);
+  const canManage = ["OWNER", "ADMIN"].includes(role);
   const { data: empData } = useEmployees({ limit: 200 });
   const employees = empData?.data || [];
   const createMutation = useCreateLeaveRequest();
@@ -66,8 +67,12 @@ export default function LeaveRequestsPage() {
           <Button variant="ghost" size="icon-sm" onClick={() => approveMutation.mutate({ id: row.original.id, dto: { status: "APPROVED" } }, { onError: (err) => showToast(getApiErrorMessage(err, "Failed to approve"), "error") })}><Check className="h-4 w-4 text-green-600" /></Button>
           <Button variant="ghost" size="icon-sm" onClick={() => approveMutation.mutate({ id: row.original.id, dto: { status: "REJECTED" } }, { onError: (err) => showToast(getApiErrorMessage(err, "Failed to reject"), "error") })}><X className="h-4 w-4 text-red-600" /></Button>
         </>}
-        <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ employeeId: row.original.employeeId, type: row.original.type, reason: row.original.reason ?? undefined, startDate: row.original.startDate.slice(0, 10), endDate: row.original.endDate.slice(0, 10) }); }}><Pencil className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        {canManage && (
+          <>
+            <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ employeeId: row.original.employeeId, type: row.original.type, reason: row.original.reason ?? undefined, startDate: row.original.startDate.slice(0, 10), endDate: row.original.endDate.slice(0, 10) }); }}><Pencil className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon-sm" onClick={() => setConfirmDelete(row.original.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+          </>
+        )}
       </div>
     )},
   ];
@@ -82,7 +87,7 @@ export default function LeaveRequestsPage() {
             <DialogHeader><DialogTitle>Add Leave Request</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><label className="text-sm font-medium">Employee</label><Select value={form.employeeId || ""} onValueChange={(v) => setForm({ ...form, employeeId: v } as LeaveRequestForm)}><SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.user ? `${e.user.firstName} ${e.user.lastName}` : e.employeeCode}</SelectItem>)}</SelectContent></Select></div>
-               <div><label className="text-sm font-medium">Type</label><Select value={form.type || "MEDICAL"} onValueChange={(v) => setForm({ ...form, type: v } as LeaveRequestForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SICK">Sick</SelectItem><SelectItem value="CASUAL">Casual</SelectItem><SelectItem value="ANNUAL">Annual</SelectItem><SelectItem value="MEDICAL">Medical</SelectItem><SelectItem value="OTHER">Other</SelectItem></SelectContent></Select></div>
+               <div><label className="text-sm font-medium">Type</label><Select value="MEDICAL" disabled><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="MEDICAL">Medical (Emergency)</SelectItem></SelectContent></Select></div>
               <div><label className="text-sm font-medium">Start Date</label><Input type="date" value={form.startDate || ""} onChange={(e) => setForm({ ...form, startDate: e.target.value } as LeaveRequestForm)} /></div>
               <div><label className="text-sm font-medium">End Date (max 3 days)</label><Input type="date" value={form.endDate || ""} onChange={(e) => setForm({ ...form, endDate: e.target.value } as LeaveRequestForm)} /></div>
               <div><label className="text-sm font-medium">Reason</label><Input value={form.reason || ""} onChange={(e) => setForm({ ...form, reason: e.target.value } as LeaveRequestForm)} /></div>
@@ -116,7 +121,7 @@ export default function LeaveRequestsPage() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>Edit Leave Request</DialogTitle></DialogHeader>
           <div className="space-y-3">
-             <div><label className="text-sm font-medium">Type</label><Select value={form.type || "SICK"} onValueChange={(v) => setForm({ ...form, type: v } as LeaveRequestForm)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SICK">Sick</SelectItem><SelectItem value="CASUAL">Casual</SelectItem><SelectItem value="ANNUAL">Annual</SelectItem><SelectItem value="MEDICAL">Medical</SelectItem><SelectItem value="OTHER">Other</SelectItem></SelectContent></Select></div>
+             <div><label className="text-sm font-medium">Type</label><Select value="MEDICAL" disabled><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="MEDICAL">Medical (Emergency)</SelectItem></SelectContent></Select></div>
             <div><label className="text-sm font-medium">Start Date</label><Input type="date" value={form.startDate || ""} onChange={(e) => setForm({ ...form, startDate: e.target.value } as LeaveRequestForm)} /></div>
             <div><label className="text-sm font-medium">End Date</label><Input type="date" value={form.endDate || ""} onChange={(e) => setForm({ ...form, endDate: e.target.value } as LeaveRequestForm)} /></div>
             <div><label className="text-sm font-medium">Reason</label><Input value={form.reason || ""} onChange={(e) => setForm({ ...form, reason: e.target.value } as LeaveRequestForm)} /></div>

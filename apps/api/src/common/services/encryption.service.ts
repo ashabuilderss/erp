@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   createCipheriv,
   createDecipheriv,
@@ -22,7 +22,6 @@ export class EncryptionService {
       );
     }
     this.key = scryptSync(secret, 'encryption-salt', KEY_LENGTH);
-    Logger.log('EncryptionService initialized', 'EncryptionService');
   }
 
   encrypt(text: string): string {

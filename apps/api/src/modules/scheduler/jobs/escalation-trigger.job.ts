@@ -18,7 +18,9 @@ export class EscalationTriggerJob {
   async handle() {
     const acquired = await this.advisoryLock.tryLock(ESCALATION_LOCK_KEY);
     if (!acquired) {
-      this.logger.warn('Escalation job already running on another instance, skipping');
+      this.logger.warn(
+        'Escalation job already running on another instance, skipping',
+      );
       return;
     }
 
@@ -91,7 +93,12 @@ export class EscalationTriggerJob {
           const key = `Lead:${lead.id}`;
           if (alreadyTriggered.has(key)) continue;
           alreadyTriggered.add(key);
-          await this.createEvent(rule, lead.id, 'Lead', `Lead "${lead.customerName}" stale for ${staleDays}+ days`);
+          await this.createEvent(
+            rule,
+            lead.id,
+            'Lead',
+            `Lead "${lead.customerName}" stale for ${staleDays}+ days`,
+          );
         }
         break;
       }
@@ -106,16 +113,26 @@ export class EscalationTriggerJob {
         });
 
         for (const emp of employees) {
-          const attendance = await this.prisma.attendance.findUnique({
-            where: {
-              companyId_employeeId_date: { companyId: rule.companyId, employeeId: emp.id, date: today },
-            },
-          });
-          if (!attendance || attendance.status === 'ABSENT') {
+          const attendance =
+            await this.prisma.attendanceDayAggregate.findUnique({
+              where: {
+                companyId_employeeId_date: {
+                  companyId: rule.companyId,
+                  employeeId: emp.id,
+                  date: today,
+                },
+              },
+            });
+          if (!attendance || attendance.totalWorkMinutes === 0) {
             const key = `Employee:${emp.id}`;
             if (alreadyTriggered.has(key)) continue;
             alreadyTriggered.add(key);
-            await this.createEvent(rule, emp.id, 'Employee', `Employee missed attendance today`);
+            await this.createEvent(
+              rule,
+              emp.id,
+              'Employee',
+              `Employee missed attendance today`,
+            );
           }
         }
         break;
@@ -124,7 +141,9 @@ export class EscalationTriggerJob {
       case 'LEAVE_PENDING': {
         const pendingLeaves = await this.prisma.leaveRequest.findMany({
           where: {
-            employee: { companyId: rule.companyId },
+            employeesLeaveRequestsEmployeeIdToemployees: {
+              companyId: rule.companyId,
+            },
             status: 'PENDING',
             createdAt: { lt: cutoff },
           },
@@ -135,7 +154,12 @@ export class EscalationTriggerJob {
           const key = `LeaveRequest:${leave.id}`;
           if (alreadyTriggered.has(key)) continue;
           alreadyTriggered.add(key);
-          await this.createEvent(rule, leave.id, 'LeaveRequest', `Leave request pending for ${staleDays}+ days`);
+          await this.createEvent(
+            rule,
+            leave.id,
+            'LeaveRequest',
+            `Leave request pending for ${staleDays}+ days`,
+          );
         }
         break;
       }
@@ -143,7 +167,9 @@ export class EscalationTriggerJob {
       case 'APPROVAL_PENDING': {
         const staleApprovals = await this.prisma.leaveRequest.findMany({
           where: {
-            employee: { companyId: rule.companyId },
+            employeesLeaveRequestsEmployeeIdToemployees: {
+              companyId: rule.companyId,
+            },
             status: 'PENDING',
             createdAt: { lt: cutoff },
           },
@@ -154,7 +180,12 @@ export class EscalationTriggerJob {
           const key = `LeaveRequest:${app.id}`;
           if (alreadyTriggered.has(key)) continue;
           alreadyTriggered.add(key);
-          await this.createEvent(rule, app.id, 'LeaveRequest', `Leave request awaiting approval for ${staleDays}+ days`);
+          await this.createEvent(
+            rule,
+            app.id,
+            'LeaveRequest',
+            `Leave request awaiting approval for ${staleDays}+ days`,
+          );
         }
         break;
       }
@@ -173,7 +204,12 @@ export class EscalationTriggerJob {
           const key = `EmployeeAssignment:${task.id}`;
           if (alreadyTriggered.has(key)) continue;
           alreadyTriggered.add(key);
-          await this.createEvent(rule, task.id, 'EmployeeAssignment', `Task overdue`);
+          await this.createEvent(
+            rule,
+            task.id,
+            'EmployeeAssignment',
+            `Task overdue`,
+          );
         }
         break;
       }

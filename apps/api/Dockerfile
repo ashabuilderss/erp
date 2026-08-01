@@ -12,6 +12,7 @@ COPY prisma.config.ts ./
 RUN npx prisma generate
 COPY nest-cli.json tsconfig*.json ./
 COPY src ./src
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 RUN npm prune --omit=dev
 

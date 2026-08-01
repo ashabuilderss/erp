@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import {
+  useEscalationRules,
+  useEscalationEvents,
+  useCreateEscalationRule,
+  useDeleteEscalationRule,
+  useResolveEscalationEvent,
+  useCurrentUser,
+} from "@/hooks/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,41 +25,32 @@ const TRIGGER_LABELS: Record<string, string> = {
 };
 
 export default function EscalationPage() {
-  const qc = useQueryClient();
   const [tab, setTab] = useState<"rules" | "events">("rules");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", triggerType: "LEAD_STALE", level: "1", notifyRoles: "", configDays: "3" });
 
-  const { data: rules } = useQuery({
-    queryKey: ["escalation-rules"],
-    queryFn: () => api.get<any[]>("/escalation-rules"),
-  });
+  const { data: rules } = useEscalationRules();
+  const { data: events } = useEscalationEvents();
+  const createRule = useCreateEscalationRule();
+  const deleteRule = useDeleteEscalationRule();
+  const resolveEvent = useResolveEscalationEvent();
+  const { data: currentUser } = useCurrentUser();
+  const canManage = currentUser?.user?.role === "OWNER" || currentUser?.user?.role === "ADMIN";
 
-  const { data: events } = useQuery({
-    queryKey: ["escalation-events"],
-    queryFn: () => api.get<any[]>("/escalation-events"),
-  });
-
-  const createRule = useMutation({
-    mutationFn: () => api.post("/escalation-rules", {
-      name: form.name,
-      triggerType: form.triggerType,
-      level: parseInt(form.level),
-      notifyRoles: form.notifyRoles.split(",").map(s => s.trim()).filter(Boolean),
-      config: { staleDays: parseInt(form.configDays) },
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["escalation-rules"] }); setShowForm(false); },
-  });
-
-  const deleteRule = useMutation({
-    mutationFn: (id: string) => api.delete(`/escalation-rules/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["escalation-rules"] }),
-  });
-
-  const resolveEvent = useMutation({
-    mutationFn: (id: string) => api.patch(`/escalation-events/${id}/resolve`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["escalation-events"] }),
-  });
+  const handleCreateRule = () => {
+    createRule.mutate(
+      {
+        name: form.name,
+        triggerType: form.triggerType,
+        level: parseInt(form.level),
+        notifyRoles: form.notifyRoles.split(",").map((s) => s.trim()).filter(Boolean),
+        config: { staleDays: parseInt(form.configDays) },
+      },
+      {
+        onSuccess: () => setShowForm(false),
+      }
+    );
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -76,9 +73,11 @@ export default function EscalationPage() {
 
       {tab === "rules" && (
         <>
+          {canManage && (
           <div className="flex justify-end">
             <Button onClick={() => setShowForm(!showForm)}><Plus className="h-4 w-4 mr-1" />Add Rule</Button>
           </div>
+          )}
 
           {showForm && (
             <Card>
@@ -103,7 +102,7 @@ export default function EscalationPage() {
                   <div><label className="text-sm font-medium">Stale Days</label><Input type="number" value={form.configDays} onChange={(e) => setForm(p => ({ ...p, configDays: e.target.value }))} /></div>
                 </div>
                 <div><label className="text-sm font-medium">Notify Roles (comma-separated)</label><Input value={form.notifyRoles} onChange={(e) => setForm(p => ({ ...p, notifyRoles: e.target.value }))} placeholder="OWNER, ADMIN" /></div>
-                <Button onClick={() => createRule.mutate()} disabled={createRule.isPending}>Save Rule</Button>
+                <Button onClick={handleCreateRule} disabled={createRule.isPending}>Save Rule</Button>
               </CardContent>
             </Card>
           )}
@@ -127,7 +126,9 @@ export default function EscalationPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {canManage && (
                       <Button size="sm" variant="ghost" onClick={() => deleteRule.mutate(r.id)} disabled={deleteRule.isPending}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -156,7 +157,7 @@ export default function EscalationPage() {
                       <span>{new Date(e.triggeredAt).toLocaleString()}</span>
                     </div>
                   </div>
-                  {e.status === "TRIGGERED" && (
+                  {e.status === "TRIGGERED" && canManage && (
                     <Button size="sm" variant="outline" className="text-green-600" onClick={() => resolveEvent.mutate(e.id)} disabled={resolveEvent.isPending}>
                       <CheckCircle className="h-4 w-4 mr-1" />Resolve
                     </Button>

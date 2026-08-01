@@ -19,8 +19,9 @@ export class LocalStorageProvider implements StorageProvider {
     const key = `${Date.now()}-${randomBytes(6).toString('hex')}${extname(file.originalname)}`;
     const filePath = join(dir, key);
     fs.writeFileSync(filePath, file.buffer);
+    const signedUrl = await this.getUrl(`general/${key}`);
     return {
-      url: `/uploads/general/${key}`,
+      url: signedUrl,
       key: `general/${key}`,
       size: file.size,
       mimetype: file.mimetype,
@@ -37,7 +38,7 @@ export class LocalStorageProvider implements StorageProvider {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
 
-  getUrl(key: string): string {
+  async getUrl(key: string): Promise<string> {
     return `/uploads/${key}`;
   }
 }

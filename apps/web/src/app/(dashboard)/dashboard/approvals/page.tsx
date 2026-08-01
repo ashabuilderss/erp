@@ -14,7 +14,7 @@ import type { LeaveStatus } from "@/lib/types";
 export default function ApprovalsPage() {
   const { data: currentUser } = useCurrentUser();
   const role = currentUser?.user?.role;
-  const canApprove = role === "OWNER" || role === "ADMIN" || role === "HR_MANAGER";
+  const canApprove = role === "OWNER" || role === "ADMIN" || role === "HR_MANAGER" || role === "MANAGER";
   const { data: leavesData, isLoading } = useLeaveRequests({ status: "PENDING" as LeaveStatus, limit: 50 });
   const approveLeave = useApproveLeaveRequest();
   const { showToast } = useToast();

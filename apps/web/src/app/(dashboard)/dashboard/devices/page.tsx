@@ -134,7 +134,7 @@ function AdminDevicesView() {
   const { data: currentUser } = useCurrentUser();
   const role = currentUser?.user?.role;
 
-  if (role === "ADMIN" || role === "HR_MANAGER") {
+  if (role === "ADMIN" || role === "HR_MANAGER" || role === "MANAGER") {
     const devices = data?.data ?? [];
     return (
       <div className="space-y-6">

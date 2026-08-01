@@ -18,39 +18,83 @@ describe('LeadsService', () => {
   });
 
   const mockEventEmitter = () => ({ emit: jest.fn() });
-  const mockTransition = () => ({ execute: jest.fn() });
+  const mockTransition = () => ({
+    validate: jest.fn(),
+    canTransition: jest.fn().mockReturnValue(true),
+    execute: jest.fn(),
+    getRule: jest.fn(),
+  });
+  const mockGovernanceEventPublisher = {
+    publish: jest.fn().mockResolvedValue(undefined),
+  };
 
   describe('create', () => {
     it('throws BadRequestException when employee creates lead for another employee', async () => {
       const prisma = mockPrisma();
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-other' });
-      const service = new LeadsService(prisma as never, mockEventEmitter() as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        mockEventEmitter() as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
       await expect(
-        service.create({ assignedToEmployeeId: 'emp-other', customerName: 'Test' } as never, 'c1', 'EMPLOYEE', 'emp-self'),
+        service.create(
+          { assignedToEmployeeId: 'emp-other', customerName: 'Test' },
+          'c1',
+          'EMPLOYEE',
+          'emp-self',
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('succeeds when employee creates lead for self', async () => {
       const prisma = mockPrisma();
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-self' });
-      prisma.lead.create.mockResolvedValue({ id: 'lead-1', customerName: 'Test' });
+      prisma.lead.create.mockResolvedValue({
+        id: 'lead-1',
+        customerName: 'Test',
+      });
       const eventEmitter = mockEventEmitter();
-      const service = new LeadsService(prisma as never, eventEmitter as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        eventEmitter as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
-      const result = await service.create({ assignedToEmployeeId: 'emp-self', customerName: 'Test' } as never, 'c1', 'EMPLOYEE', 'emp-self');
+      const result = await service.create(
+        { assignedToEmployeeId: 'emp-self', customerName: 'Test' },
+        'c1',
+        'EMPLOYEE',
+        'emp-self',
+      );
 
       expect(result).toHaveProperty('id', 'lead-1');
-      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.created', expect.objectContaining({ companyId: 'c1' }));
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'lead.created',
+        expect.objectContaining({ companyId: 'c1' }),
+      );
     });
 
     it('succeeds when admin creates lead with any assignedToEmployeeId', async () => {
       const prisma = mockPrisma();
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1' });
       prisma.lead.create.mockResolvedValue({ id: 'lead-1' });
-      const service = new LeadsService(prisma as never, mockEventEmitter() as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        mockEventEmitter() as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
-      const result = await service.create({ assignedToEmployeeId: 'emp-1', customerName: 'Test' } as never, 'c1', 'ADMIN', undefined);
+      const result = await service.create(
+        { assignedToEmployeeId: 'emp-1', customerName: 'Test' },
+        'c1',
+        'ADMIN',
+        undefined,
+      );
 
       expect(result).toHaveProperty('id', 'lead-1');
     });
@@ -59,10 +103,20 @@ describe('LeadsService', () => {
       const prisma = mockPrisma();
       prisma.employee.findFirst.mockResolvedValue(null);
       prisma.property.findFirst.mockResolvedValue(null);
-      const service = new LeadsService(prisma as never, mockEventEmitter() as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        mockEventEmitter() as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
       await expect(
-        service.create({ propertyId: 'prop-invalid', customerName: 'Test' } as never, 'c1', 'ADMIN', undefined),
+        service.create(
+          { propertyId: 'prop-invalid', customerName: 'Test' },
+          'c1',
+          'ADMIN',
+          undefined,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -70,10 +124,24 @@ describe('LeadsService', () => {
       const prisma = mockPrisma();
       prisma.property.findFirst.mockResolvedValue({ id: 'prop-1' });
       prisma.customer.findFirst.mockResolvedValue(null);
-      const service = new LeadsService(prisma as never, mockEventEmitter() as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        mockEventEmitter() as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
       await expect(
-        service.create({ customerId: 'cust-invalid', propertyId: 'prop-1', customerName: 'Test' } as never, 'c1', 'ADMIN', undefined),
+        service.create(
+          {
+            customerId: 'cust-invalid',
+            propertyId: 'prop-1',
+            customerName: 'Test',
+          },
+          'c1',
+          'ADMIN',
+          undefined,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -81,41 +149,91 @@ describe('LeadsService', () => {
       const prisma = mockPrisma();
       prisma.lead.create.mockResolvedValue({ id: 'lead-1' });
       const eventEmitter = mockEventEmitter();
-      const service = new LeadsService(prisma as never, eventEmitter as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        eventEmitter as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
-      await service.create({ customerName: 'Test' } as never, 'c1', 'ADMIN', undefined);
+      await service.create({ customerName: 'Test' }, 'c1', 'ADMIN', undefined);
 
-      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.created', { companyId: 'c1', entityId: 'lead-1' });
+      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.created', {
+        companyId: 'c1',
+        entityId: 'lead-1',
+      });
     });
   });
 
   describe('updateStatus', () => {
     it('delegates to transitionService.execute with correct params', async () => {
-      const transition = mockTransition();
-      transition.execute.mockResolvedValue({ id: 'lead-1', status: 'CONTACTED' });
-      const eventEmitter = mockEventEmitter();
-      const service = new LeadsService(mockPrisma() as never, eventEmitter as never, transition as never);
-
-      const result = await service.updateStatus('lead-1', 'CONTACTED' as never, 'c1', 'emp-1', 'EMPLOYEE', 'emp-1');
-
-      expect(transition.execute).toHaveBeenCalledWith(expect.objectContaining({
-        entityType: 'Lead',
+      const prisma = mockPrisma();
+      prisma.lead.findFirst.mockResolvedValue({
         id: 'lead-1',
-        newStatus: 'CONTACTED',
         companyId: 'c1',
-      }));
+      });
+      const transition = mockTransition();
+      transition.execute.mockResolvedValue({
+        id: 'lead-1',
+        status: 'CONTACTED',
+      });
+      const eventEmitter = mockEventEmitter();
+      const service = new LeadsService(
+        prisma as never,
+        eventEmitter as never,
+        transition as never,
+        mockGovernanceEventPublisher as never,
+      );
+
+      const result = await service.updateStatus(
+        'lead-1',
+        'CONTACTED',
+        'c1',
+        { assignedToEmployeeId: 'emp-1', companyId: 'c1' },
+        'EMPLOYEE',
+        'emp-1',
+      );
+
+      expect(transition.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'Lead',
+          id: 'lead-1',
+          newStatus: 'CONTACTED',
+          companyId: 'c1',
+        }),
+      );
       expect(result).toHaveProperty('id', 'lead-1');
     });
 
     it('emits lead.updated event', async () => {
+      const prisma = mockPrisma();
+      prisma.lead.findFirst.mockResolvedValue({
+        id: 'lead-1',
+        companyId: 'c1',
+      });
       const transition = mockTransition();
       transition.execute.mockResolvedValue({ id: 'lead-1' });
       const eventEmitter = mockEventEmitter();
-      const service = new LeadsService(mockPrisma() as never, eventEmitter as never, transition as never);
+      const service = new LeadsService(
+        prisma as never,
+        eventEmitter as never,
+        transition as never,
+        mockGovernanceEventPublisher as never,
+      );
 
-      await service.updateStatus('lead-1', 'CONTACTED' as never, 'c1', 'emp-1', 'EMPLOYEE', 'emp-1');
+      await service.updateStatus(
+        'lead-1',
+        'CONTACTED',
+        'c1',
+        { assignedToEmployeeId: 'emp-1', companyId: 'c1' },
+        'EMPLOYEE',
+        'emp-1',
+      );
 
-      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.updated', { companyId: 'c1', entityId: 'lead-1' });
+      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.updated', {
+        companyId: 'c1',
+        entityId: 'lead-1',
+      });
     });
   });
 
@@ -128,9 +246,19 @@ describe('LeadsService', () => {
         convertedToCustomerId: 'cust-1',
         companyId: 'c1',
       });
-      const service = new LeadsService(prisma as never, mockEventEmitter() as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        mockEventEmitter() as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
-      await expect(service.convertToCustomer('lead-1', 'c1', 'emp-1')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.convertToCustomer('lead-1', {
+          companyId: 'c1',
+          assignedToEmployeeId: 'emp-1',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('creates customer, updates lead status, updates property status', async () => {
@@ -152,7 +280,9 @@ describe('LeadsService', () => {
       const eventEmitter = mockEventEmitter();
       prisma.$transaction.mockImplementation(async (fn: any) => {
         const tx = {
-          customer: { create: jest.fn().mockResolvedValue({ id: 'cust-1', name: 'John' }) },
+          customer: {
+            create: jest.fn().mockResolvedValue({ id: 'cust-1', name: 'John' }),
+          },
           property: { update: jest.fn() },
           lead: {
             update: jest.fn().mockResolvedValue({
@@ -165,13 +295,24 @@ describe('LeadsService', () => {
         };
         return fn(tx);
       });
-      const service = new LeadsService(prisma as never, eventEmitter as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        eventEmitter as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
-      const result = await service.convertToCustomer('lead-1', 'c1', 'emp-1');
+      const result = await service.convertToCustomer('lead-1', {
+        companyId: 'c1',
+        assignedToEmployeeId: 'emp-1',
+      });
 
       expect(result).toHaveProperty('lead');
       expect(result).toHaveProperty('customer');
-      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.updated', { companyId: 'c1', entityId: 'lead-1' });
+      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.updated', {
+        companyId: 'c1',
+        entityId: 'lead-1',
+      });
     });
   });
 
@@ -179,22 +320,43 @@ describe('LeadsService', () => {
     it('throws NotFoundException when lead not found', async () => {
       const prisma = mockPrisma();
       prisma.lead.findFirst.mockResolvedValue(null);
-      const service = new LeadsService(prisma as never, mockEventEmitter() as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        mockEventEmitter() as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
-      await expect(service.remove('lead-1', 'c1')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.remove('lead-1', 'c1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
-    it('deletes lead and emits lead.deleted', async () => {
+    it('soft-deletes lead and emits lead.deleted', async () => {
       const prisma = mockPrisma();
-      prisma.lead.findFirst.mockResolvedValue({ id: 'lead-1', companyId: 'c1' });
-      prisma.lead.delete.mockResolvedValue({});
+      prisma.lead.findFirst.mockResolvedValue({
+        id: 'lead-1',
+        companyId: 'c1',
+      });
+      prisma.lead.update.mockResolvedValue({});
       const eventEmitter = mockEventEmitter();
-      const service = new LeadsService(prisma as never, eventEmitter as never, mockTransition() as never);
+      const service = new LeadsService(
+        prisma as never,
+        eventEmitter as never,
+        mockTransition() as never,
+        mockGovernanceEventPublisher as never,
+      );
 
       await service.remove('lead-1', 'c1');
 
-      expect(prisma.lead.delete).toHaveBeenCalledWith({ where: { id: 'lead-1' } });
-      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.deleted', { companyId: 'c1', entityId: 'lead-1' });
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: 'lead-1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(eventEmitter.emit).toHaveBeenCalledWith('lead.deleted', {
+        companyId: 'c1',
+        entityId: 'lead-1',
+      });
     });
   });
 });

@@ -38,6 +38,18 @@ import {
   Store,
   MessageSquare,
   Database,
+  Megaphone,
+  FolderOpen,
+  TrendingUp,
+  Settings2,
+  Bell,
+  ListChecks,
+  FileSignature,
+  UserPlus,
+  Gift,
+  GraduationCap,
+  Wrench,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
@@ -79,10 +91,24 @@ const iconMap: Record<string, React.ElementType> = {
   Store,
   MessageSquare,
   Database,
+  Megaphone,
+  FolderOpen,
+  TrendingUp,
+  Settings2,
+  Bell,
+  ListChecks,
+  FileSignature,
+  UserPlus,
+  Gift,
+  GraduationCap,
+  Wrench,
+  CalendarDays,
 };
 
+import { UserRole } from "@/lib/constants";
+
 interface SidebarProps {
-  role: "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
+  role: UserRole;
 }
 
 export function Sidebar({ role }: SidebarProps) {

@@ -1,27 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private transporter: nodemailer.Transporter | null = null;
+  private sesClient: SESClient | null = null;
+  private readonly defaultFrom: string;
 
   constructor() {
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT) || 587;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
+    this.defaultFrom = process.env.SES_FROM_EMAIL || process.env.SMTP_FROM || 'noreply@ashabuilders.com';
+    
+    const region = process.env.AWS_REGION || process.env.S3_REGION || 'ap-south-1';
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY;
 
-    if (host && user && pass) {
-      this.transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: { user, pass },
+    if (accessKeyId && secretAccessKey) {
+      this.sesClient = new SESClient({
+        region,
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+        },
       });
-      this.logger.log('Email service initialized');
+      this.logger.log('AWS SES Email service initialized');
     } else {
-      this.logger.warn('SMTP not configured — email sending disabled');
+      this.logger.warn('AWS SES credentials not configured — email sending disabled');
     }
   }
 
@@ -30,22 +33,30 @@ export class EmailService {
     subject: string;
     html: string;
   }): Promise<boolean> {
-    if (!this.transporter) {
-      this.logger.warn(`Email not sent (no SMTP): ${params.subject} -> ${params.to}`);
+    if (!this.sesClient) {
+      this.logger.warn(`Email not sent (SES disabled): ${params.subject} -> ${params.to}`);
       return false;
     }
 
     try {
-      await this.transporter.sendMail({
-        from: process.env.SMTP_FROM || 'noreply@ashabuilders.com',
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
+      const command = new SendEmailCommand({
+        Source: this.defaultFrom,
+        Destination: {
+          ToAddresses: [params.to],
+        },
+        Message: {
+          Subject: { Data: params.subject, Charset: 'UTF-8' },
+          Body: {
+            Html: { Data: params.html, Charset: 'UTF-8' },
+          },
+        },
       });
-      this.logger.log(`Email sent: ${params.subject} -> ${params.to}`);
+
+      await this.sesClient.send(command);
+      this.logger.log(`Email sent via SES: ${params.subject} -> ${params.to}`);
       return true;
     } catch (err) {
-      this.logger.error(`Email failed: ${params.subject} -> ${params.to}`, err);
+      this.logger.error(`Email failed (SES): ${params.subject} -> ${params.to}`, err);
       return false;
     }
   }

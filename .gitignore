@@ -20,3 +20,5 @@ uploads/
 !apps/api/src/modules/uploads/**
 backups/
 coverage/
+temp_*.sql
+.env.*.local

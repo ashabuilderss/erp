@@ -1,6 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
 
+const mockGovernanceEventPublisher = {
+  publish: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('BookingsService tenant isolation', () => {
   it('rejects a property that does not belong to the booking company', async () => {
     const prisma = {
@@ -19,7 +23,12 @@ describe('BookingsService tenant isolation', () => {
     };
     const eventEmitter = { emit: jest.fn() };
     const mockTransition = {} as never;
-    const service = new BookingsService(prisma as never, eventEmitter as never, mockTransition);
+    const service = new BookingsService(
+      prisma as never,
+      eventEmitter as never,
+      mockTransition,
+      mockGovernanceEventPublisher as never,
+    );
 
     await expect(
       service.create(
@@ -61,7 +70,12 @@ describe('BookingsService tenant isolation', () => {
     };
     const eventEmitter = { emit: jest.fn() };
     const mockTransition = {} as never;
-    const service = new BookingsService(prisma as never, eventEmitter as never, mockTransition);
+    const service = new BookingsService(
+      prisma as never,
+      eventEmitter as never,
+      mockTransition,
+      mockGovernanceEventPublisher as never,
+    );
 
     await expect(
       service.create(
@@ -103,7 +117,12 @@ describe('BookingsService tenant isolation', () => {
     };
     const eventEmitter = { emit: jest.fn() };
     const mockTransition = {} as never;
-    const service = new BookingsService(prisma as never, eventEmitter as never, mockTransition);
+    const service = new BookingsService(
+      prisma as never,
+      eventEmitter as never,
+      mockTransition,
+      mockGovernanceEventPublisher as never,
+    );
 
     await expect(
       service.create(
@@ -151,7 +170,12 @@ describe('BookingsService tenant isolation', () => {
     };
     const eventEmitter = { emit: jest.fn() };
     const mockTransition = {} as never;
-    const service = new BookingsService(prisma as never, eventEmitter as never, mockTransition);
+    const service = new BookingsService(
+      prisma as never,
+      eventEmitter as never,
+      mockTransition,
+      mockGovernanceEventPublisher as never,
+    );
 
     await expect(
       service.create(

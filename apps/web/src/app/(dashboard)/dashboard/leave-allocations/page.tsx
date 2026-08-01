@@ -47,7 +47,7 @@ export default function LeaveAllocationsPage() {
   const [form, setForm] = useState<LeaveAllocationForm>({});
   const [errors, setErrors] = useState<Partial<Record<"employeeId" | "leaveType" | "totalDays", string>>>({});
 
-  const resetForm = () => setForm({ employeeId: "", year: new Date().getFullYear(), leaveType: "SICK", totalDays: 0 });
+  const resetForm = () => setForm({ employeeId: "", year: new Date().getFullYear(), leaveType: "MEDICAL", totalDays: 0 });
 
   const columns: ColumnDef<LeaveAllocation>[] = [
     { accessorKey: "employee", header: "Employee", cell: ({ row }) => (
@@ -80,11 +80,11 @@ export default function LeaveAllocationsPage() {
             <div className="space-y-3">
               <div><label className="text-sm font-medium">Employee</label><Select value={form.employeeId || ""} onValueChange={(v) => { setForm({ ...form, employeeId: v } as LeaveAllocationForm); clearFieldError("employeeId", setErrors); }}><SelectTrigger className={errors.employeeId ? "border-red-500" : ""}><SelectValue placeholder="Select employee" /></SelectTrigger><SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.employeeCode} - {e.user ? `${e.user.firstName} ${e.user.lastName}` : e.id}</SelectItem>)}</SelectContent></Select><FieldError error={errors.employeeId} /></div>
               <div><label className="text-sm font-medium">Year</label><Input type="number" value={form.year || new Date().getFullYear()} onChange={(e) => setForm({ ...form, year: Number(e.target.value) } as LeaveAllocationForm)} /></div>
-              <div><label className="text-sm font-medium">Leave Type</label><Select value={form.leaveType || "SICK"} onValueChange={(v) => { setForm({ ...form, leaveType: v } as LeaveAllocationForm); clearFieldError("leaveType", setErrors); }}><SelectTrigger className={errors.leaveType ? "border-red-500" : ""}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SICK">Sick</SelectItem><SelectItem value="CASUAL">Casual</SelectItem><SelectItem value="ANNUAL">Annual</SelectItem><SelectItem value="OTHER">Other</SelectItem></SelectContent></Select><FieldError error={errors.leaveType} /></div>
+              <div><label className="text-sm font-medium">Leave Type</label><Select value="MEDICAL" disabled><SelectTrigger className={errors.leaveType ? "border-red-500" : ""}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="MEDICAL">Medical (Emergency)</SelectItem></SelectContent></Select><FieldError error={errors.leaveType} /></div>
               <div><label className="text-sm font-medium">Total Days</label><Input type="number" min={0} value={form.totalDays || 0} onChange={(e) => { setForm({ ...form, totalDays: Number(e.target.value) } as LeaveAllocationForm); clearFieldError("totalDays", setErrors); }} className={errors.totalDays ? "border-red-500" : ""} /><FieldError error={errors.totalDays} /></div>
             </div>
             <DialogFooter showCloseButton>
-              <Button onClick={() => { const rules: ValidationRules<CreateLeaveAllocationDto> = { employeeId: { required: "Employee is required" }, leaveType: { required: "Leave type is required" }, totalDays: { required: "Total days is required" } }; const errs = validateForm(form, rules); setErrors(errs); if (Object.keys(errs).length > 0) return; createMutation.mutate({ employeeId: form.employeeId!, year: form.year, leaveType: form.leaveType!, totalDays: form.totalDays! } as CreateLeaveAllocationDto, { onSuccess: () => { setErrors({}); showToast("Allocation created"); setCreateOpen(false); resetForm(); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create"), "error") }); }} disabled={createMutation.isPending}>Save</Button>
+              <Button onClick={() => { const rules: ValidationRules<CreateLeaveAllocationDto> = { employeeId: { required: "Employee is required" }, leaveType: { required: "Leave type is required" }, totalDays: { required: "Total days is required" } }; const errs = validateForm(form, rules); setErrors(errs); if (Object.keys(errs).length > 0) return; createMutation.mutate({ employeeId: form.employeeId!, year: form.year, leaveType: "MEDICAL", totalDays: form.totalDays! } as CreateLeaveAllocationDto, { onSuccess: () => { setErrors({}); showToast("Allocation created"); setCreateOpen(false); resetForm(); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create"), "error") }); }} disabled={createMutation.isPending}>Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

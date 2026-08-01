@@ -20,13 +20,15 @@ import {
   CurrentEmployeeId,
 } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
 
 @Controller('leave-allocations')
 export class LeaveAllocationsController {
   constructor(private readonly service: LeaveAllocationsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.LEAVE_CREATE)
   async create(
     @Body() dto: CreateLeaveAllocationDto,
@@ -36,7 +38,7 @@ export class LeaveAllocationsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.LEAVE_READ)
   async findAll(
     @Query() query: QueryLeaveAllocationDto,
@@ -46,7 +48,7 @@ export class LeaveAllocationsController {
   }
 
   @Get('my-balance')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
   @RequirePermissions(Permissions.LEAVE_READ)
   async myBalance(
     @CurrentEmployeeId() employeeId: string | null,
@@ -56,7 +58,7 @@ export class LeaveAllocationsController {
   }
 
   @Get('employee/:employeeId')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.LEAVE_READ)
   async employeeBalance(
     @Param('employeeId') employeeId: string,
@@ -66,7 +68,7 @@ export class LeaveAllocationsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.LEAVE_READ)
   async findOne(
     @Param('id') id: string,
@@ -76,7 +78,7 @@ export class LeaveAllocationsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.LEAVE_CREATE)
   async update(
     @Param('id') id: string,
@@ -87,7 +89,7 @@ export class LeaveAllocationsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
   @RequirePermissions(Permissions.LEAVE_APPROVE)
   async remove(
     @Param('id') id: string,

@@ -12,34 +12,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ComplaintStatus } from '@prisma/client';
 import { BaseQueryDto } from '../../../common/dto/base-query.dto';
 
-export class CreateBrokerDto {
-  @ApiProperty()
-  @IsString()
-  name: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  companyName?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  phone?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  commissionRate?: number;
-}
-
-export class QueryBrokerDto extends BaseQueryDto {}
-
 export class CreateComplaintDto {
   @ApiProperty()
   @IsString()
@@ -74,7 +46,10 @@ export class QueryComplaintDto extends BaseQueryDto {
 export class UpdateComplaintDto {
   @ApiPropertyOptional() @IsOptional() @IsString() subject?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiPropertyOptional({ enum: ComplaintStatus }) @IsOptional() @IsEnum(ComplaintStatus) status?: ComplaintStatus;
+  @ApiPropertyOptional({ enum: ComplaintStatus })
+  @IsOptional()
+  @IsEnum(ComplaintStatus)
+  status?: ComplaintStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() resolution?: string;
 }
 

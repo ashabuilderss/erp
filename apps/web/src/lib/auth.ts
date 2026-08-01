@@ -25,7 +25,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         let userFields: UserFields | null = null;
 
         if (credentials?.accessToken) {
-          const res = await fetch(`${API_URL}/api/auth/me`, {
+          const res = await fetch(`${API_URL}/api/v1/auth/me`, {
             headers: {
               Authorization: `Bearer ${String(credentials.accessToken)}`,
             },
@@ -43,7 +43,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             employeeId: data.employee?.id ?? null,
           };
         } else if (credentials?.email && credentials?.password) {
-          const res = await fetch(`${API_URL}/api/auth/login`, {
+          const res = await fetch(`${API_URL}/api/v1/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

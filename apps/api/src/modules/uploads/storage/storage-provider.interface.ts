@@ -13,5 +13,5 @@ export interface StorageProvider {
     size: number;
   }): Promise<UploadResult>;
   delete(key: string): Promise<void>;
-  getUrl(key: string): string;
+  getUrl(key: string): Promise<string>;
 }

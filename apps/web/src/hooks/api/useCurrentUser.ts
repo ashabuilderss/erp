@@ -3,13 +3,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
+import { UserRole } from "@/lib/constants";
+
 export interface CurrentUserData {
   user: {
     id: string;
     email: string;
     firstName: string;
     lastName: string;
-    role: "OWNER" | "ADMIN" | "HR_MANAGER" | "EMPLOYEE";
+    role: UserRole;
     isActive: boolean;
   };
   company: {

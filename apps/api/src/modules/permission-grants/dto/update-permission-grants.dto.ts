@@ -1,4 +1,10 @@
-import { IsArray, IsBoolean, IsIn, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { Permissions } from '../../../common/auth/permissions';
 

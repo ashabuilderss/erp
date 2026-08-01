@@ -28,7 +28,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD before running docker compose}
     command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,8 +52,12 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL before running docker compose}
       REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD before running docker compose}@redis:6379
       PORT: 4000
+      USE_LEGACY_RBAC: ${USE_LEGACY_RBAC:-true}
+      AUTH_LOGIN_THROTTLE_LIMIT: ${AUTH_LOGIN_THROTTLE_LIMIT:-30}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      NODE_OPTIONS: "--max-old-space-size=1536"
     ports:
-      - "127.0.0.1:4000:4000"
+      - "4000:4000"
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -63,12 +67,17 @@ services:
         condition: service_healthy
       api-migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http = require('http'); http.get('http://localhost:4000/api/health', (res) => { if (res.statusCode === 200) { process.exit(0); } else { process.exit(1); } }).on('error', () => process.exit(1));\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     deploy:
       resources:
         limits:
           cpus: "1"
-          memory: 512M
+          memory: 2G
 
   api-migrate:
     build:
@@ -87,6 +96,27 @@ services:
         condition: service_healthy
     restart: "no"
 
+  api-seed:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: dashboard-api-seed
+    command: ["npx", "tsx", "prisma/seed.ts"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL before running docker compose}
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET before running docker compose}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY before running docker compose}
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL before running docker compose}
+      SEED_COMPANY_NAME: ${SEED_COMPANY_NAME:-Default Company}
+      SEED_COMPANY_SLUG: ${SEED_COMPANY_SLUG:-default-company}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?Set SEED_ADMIN_EMAIL before running docker compose}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD before running docker compose}
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   web:
     build:
       context: ./apps/web
@@ -101,7 +131,7 @@ services:
       API_URL: ${WEB_API_URL:-http://api:4000}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     ports:
-      - "127.0.0.1:3000:3000"
+      - "3000:3000"
     depends_on:
       api:
         condition: service_healthy

@@ -157,7 +157,11 @@ describe('Tenant isolation e2e', () => {
   });
 
   it('limits employee lead listing to assigned leads only', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'employee', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'employee',
+      UserRole.EMPLOYEE,
+    );
     const unassigned = await ctx.prisma.lead.create({
       data: {
         companyId: fixture.company.id,
@@ -188,7 +192,11 @@ describe('Tenant isolation e2e', () => {
   });
 
   it('limits employee property listing to assigned properties only', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'employee', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'employee',
+      UserRole.EMPLOYEE,
+    );
     const unassigned = await ctx.prisma.property.create({
       data: {
         companyId: fixture.company.id,
@@ -227,7 +235,11 @@ describe('Tenant isolation e2e', () => {
   });
 
   it('limits employee site-visit listing to assigned visits only', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'employee', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'employee',
+      UserRole.EMPLOYEE,
+    );
     const property = await ctx.prisma.property.create({
       data: {
         companyId: fixture.company.id,
@@ -264,7 +276,11 @@ describe('Tenant isolation e2e', () => {
   });
 
   it('limits employee booking listing to assigned bookings only', async () => {
-    const fixture = await createCompanyFixture(ctx.prisma, 'employee', UserRole.EMPLOYEE);
+    const fixture = await createCompanyFixture(
+      ctx.prisma,
+      'employee',
+      UserRole.EMPLOYEE,
+    );
     const property = await ctx.prisma.property.create({
       data: {
         companyId: fixture.company.id,

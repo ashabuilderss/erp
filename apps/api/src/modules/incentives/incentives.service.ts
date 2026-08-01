@@ -16,7 +16,14 @@ export class IncentivesService {
   }
 
   async findAll(companyId: string, query?: QueryIncentiveDto) {
-    const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', status, payoutStatus } = query ?? {};
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      status,
+      payoutStatus,
+    } = query ?? {};
 
     const where: any = { companyId };
     if (status) where.status = status;
@@ -39,7 +46,12 @@ export class IncentivesService {
   }
 
   async findActive(companyId: string, query?: QueryIncentiveDto) {
-    const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = query ?? {};
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query ?? {};
 
     const where = { companyId, status: 'ACTIVE' as const };
 
@@ -74,7 +86,7 @@ export class IncentivesService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    return this.prisma.incentive.delete({ where: { id } });
+    return this.prisma.incentive.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
   async leaderboard(companyId: string, employeeId?: string | null) {
@@ -107,23 +119,32 @@ export class IncentivesService {
       }),
     ]);
 
-    const leadCounts = leadGroup.filter((l): l is (typeof l & { assignedToEmployeeId: string }) => !!l.assignedToEmployeeId);
-    const bookingCounts = bookingGroup.filter((b): b is (typeof b & { assignedToEmployeeId: string }) => !!b.assignedToEmployeeId);
+    const leadCounts = leadGroup.filter(
+      (l): l is typeof l & { assignedToEmployeeId: string } =>
+        !!l.assignedToEmployeeId,
+    );
+    const bookingCounts = bookingGroup.filter(
+      (b): b is typeof b & { assignedToEmployeeId: string } =>
+        !!b.assignedToEmployeeId,
+    );
 
-    const winnerIds = [...new Set([
-      ...incentivesWon.map((i) => i.winnerId).filter(Boolean),
-      ...commissions.map((c) => c.employeeId),
-      ...leadCounts.map((l) => l.assignedToEmployeeId),
-      ...bookingCounts.map((b) => b.assignedToEmployeeId),
-    ])] as string[];
+    const winnerIds = [
+      ...new Set([
+        ...incentivesWon.map((i) => i.winnerId).filter(Boolean),
+        ...commissions.map((c) => c.employeeId),
+        ...leadCounts.map((l) => l.assignedToEmployeeId),
+        ...bookingCounts.map((b) => b.assignedToEmployeeId),
+      ]),
+    ] as string[];
 
     if (winnerIds.length === 0) return [];
 
     const employees = await this.prisma.employee.findMany({
       where: { id: { in: winnerIds }, companyId },
       select: {
-        id: true, employeeCode: true,
-        user: { select: { firstName: true, lastName: true, email: true } },
+        id: true,
+        employeeCode: true,
+        users: { select: { firstName: true, lastName: true, email: true } },
       },
     });
 
@@ -140,8 +161,8 @@ export class IncentivesService {
       const emp = empMap.get(id);
       return {
         employeeId: id,
-        employeeName: emp?.user
-          ? `${emp.user.firstName} ${emp.user.lastName}`
+        employeeName: emp?.users
+          ? `${emp.users.firstName} ${emp.users.lastName}`
           : 'Unknown',
         employeeCode: emp?.employeeCode ?? '',
         incentivesWon: inc?._count?.id ?? 0,

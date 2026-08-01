@@ -64,7 +64,7 @@ export function HRDashboard() {
                       <p className="font-medium text-sm">{a.employee?.employeeCode || a.employeeId}</p>
                       <p className="text-xs text-muted-foreground">{format(new Date(a.date), "MMM dd, yyyy")}</p>
                     </div>
-                    <Badge variant="outline" className={a.status === "PRESENT" ? "bg-green-100 text-green-800" : a.status === "ABSENT" ? "bg-red-100 text-red-800" : a.status === "HALF_DAY" ? "bg-yellow-100 text-yellow-800" : "bg-blue-100 text-blue-800"}>{a.status}</Badge>
+                    <Badge variant="outline" className={a.status === "COMPLETED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>{a.status}</Badge>
                   </div>
                 ))}
               </div>

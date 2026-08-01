@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { useCurrentUser } from "@/hooks/api";
+import {
+  useCurrentUser,
+  useExpenseClaims,
+  useMyExpenseClaims,
+  useCreateExpenseClaim,
+  useApproveExpenseClaim,
+  useRejectExpenseClaim,
+} from "@/hooks/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,32 +17,20 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Receipt, Plus, CheckCircle, XCircle } from "lucide-react";
 
 export default function ExpensesPage() {
-  const qc = useQueryClient();
   const { data: currentUser } = useCurrentUser();
   const role = currentUser?.user?.role;
   const isOwnerOrAdmin = role === "OWNER" || role === "ADMIN";
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ amount: "", category: "", description: "", expenseDate: "" });
 
-  const { data: claims } = useQuery({
-    queryKey: ["expense-claims", isOwnerOrAdmin ? "all" : "my"],
-    queryFn: () => api.get<any[]>(isOwnerOrAdmin ? "/expense-claims" : "/expense-claims/my"),
-  });
+  const allClaimsQuery = useExpenseClaims();
+  const myClaimsQuery = useMyExpenseClaims();
+  const claimsData = isOwnerOrAdmin ? allClaimsQuery.data : myClaimsQuery.data;
+  const claims = Array.isArray(claimsData) ? claimsData : (claimsData as any)?.data;
 
-  const createClaim = useMutation({
-    mutationFn: () => api.post("/expense-claims", {
-      amount: parseFloat(form.amount),
-      category: form.category,
-      description: form.description || undefined,
-      expenseDate: form.expenseDate,
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["expense-claims"] }); setShowForm(false); setForm({ amount: "", category: "", description: "", expenseDate: "" }); },
-  });
-
-  const approveClaim = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => api.patch(`/expense-claims/${id}/approve`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expense-claims"] }),
-  });
+  const createClaim = useCreateExpenseClaim();
+  const approveMutation = useApproveExpenseClaim();
+  const rejectMutation = useRejectExpenseClaim();
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -73,7 +66,25 @@ export default function ExpensesPage() {
             </div>
             <div><label className="text-sm font-medium">Description</label><Input value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div><label className="text-sm font-medium">Date</label><Input type="date" value={form.expenseDate} onChange={(e) => setForm(p => ({ ...p, expenseDate: e.target.value }))} /></div>
-            <Button onClick={() => createClaim.mutate()} disabled={createClaim.isPending}>
+            <Button
+              onClick={() =>
+                createClaim.mutate(
+                  {
+                    amount: parseFloat(form.amount),
+                    category: form.category,
+                    description: form.description || undefined,
+                    expenseDate: form.expenseDate,
+                  },
+                  {
+                    onSuccess: () => {
+                      setShowForm(false);
+                      setForm({ amount: "", category: "", description: "", expenseDate: "" });
+                    },
+                  }
+                )
+              }
+              disabled={createClaim.isPending}
+            >
               {createClaim.isPending ? "Submitting..." : "Submit Claim"}
             </Button>
           </CardContent>
@@ -98,10 +109,10 @@ export default function ExpensesPage() {
                 </div>
                 {isOwnerOrAdmin && c.status === "PENDING" && (
                   <div className="flex items-center gap-2">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => approveClaim.mutate({ id: c.id, status: "APPROVED" })} disabled={approveClaim.isPending}>
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => approveMutation.mutate({ id: c.id })} disabled={approveMutation.isPending}>
                       <CheckCircle className="h-4 w-4 mr-1" />Approve
                     </Button>
-                    <Button size="sm" variant="outline" className="text-red-600 border-red-200" onClick={() => approveClaim.mutate({ id: c.id, status: "REJECTED" })} disabled={approveClaim.isPending}>
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-200" onClick={() => rejectMutation.mutate({ id: c.id, status: "REJECTED" })} disabled={rejectMutation.isPending}>
                       <XCircle className="h-4 w-4 mr-1" />Reject
                     </Button>
                   </div>

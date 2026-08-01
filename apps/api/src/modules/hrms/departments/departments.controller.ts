@@ -17,13 +17,15 @@ import { RequirePermissions } from '../../../common/decorators/permissions.decor
 import { Permissions } from '../../../common/auth/permissions';
 import { CurrentCompany } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
 
 @Controller('departments')
 export class DepartmentsController {
   constructor(private readonly departmentsService: DepartmentsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.DEPARTMENT_CREATE)
   async create(
     @Body() dto: CreateDepartmentDto,
@@ -33,7 +35,7 @@ export class DepartmentsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.DEPARTMENT_READ)
   async findAll(
     @Query() query: QueryDepartmentDto,
@@ -43,7 +45,7 @@ export class DepartmentsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.DEPARTMENT_READ)
   async findOne(
     @Param('id') id: string,
@@ -53,7 +55,7 @@ export class DepartmentsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
   @RequirePermissions(Permissions.DEPARTMENT_UPDATE)
   async update(
     @Param('id') id: string,
@@ -64,7 +66,7 @@ export class DepartmentsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
   @RequirePermissions(Permissions.DEPARTMENT_DELETE)
   async remove(
     @Param('id') id: string,

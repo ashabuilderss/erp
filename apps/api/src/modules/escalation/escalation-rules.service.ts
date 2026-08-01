@@ -55,6 +55,6 @@ export class EscalationRulesService {
     });
     if (!rule) throw new NotFoundException('Escalation rule not found');
 
-    return this.prisma.escalationRule.delete({ where: { id } });
+    return this.prisma.escalationRule.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }

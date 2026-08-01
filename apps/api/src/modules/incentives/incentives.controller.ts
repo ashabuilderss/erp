@@ -13,16 +13,21 @@ import { CreateIncentiveDto } from './dto/create-incentive.dto';
 import { UpdateIncentiveDto } from './dto/update-incentive.dto';
 import { QueryIncentiveDto } from './dto/query-incentive.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Permissions } from '../../common/auth/permissions';
 import { CurrentCompany } from '../../common/decorators/current-user.decorator';
 import { CurrentEmployeeId } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../common/decorators/idempotency.decorator';
 
 @Controller('incentives')
 export class IncentivesController {
   constructor(private readonly incentivesService: IncentivesService) {}
 
   @Post()
+  @UseIdempotency()
   @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @RequirePermissions(Permissions.INCENTIVE_CREATE)
   async create(
     @Body() dto: CreateIncentiveDto,
     @CurrentCompany('id') companyId: string,
@@ -32,6 +37,7 @@ export class IncentivesController {
 
   @Get()
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.INCENTIVE_READ)
   async findAll(
     @Query() query: QueryIncentiveDto,
     @CurrentCompany('id') companyId: string,
@@ -41,6 +47,7 @@ export class IncentivesController {
 
   @Get('active')
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.INCENTIVE_READ)
   async findActive(
     @Query() query: QueryIncentiveDto,
     @CurrentCompany('id') companyId: string,
@@ -50,6 +57,7 @@ export class IncentivesController {
 
   @Get('leaderboard')
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.INCENTIVE_READ)
   async leaderboard(
     @CurrentCompany('id') companyId: string,
     @CurrentEmployeeId() employeeId: string | null,
@@ -59,6 +67,7 @@ export class IncentivesController {
 
   @Get(':id')
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.INCENTIVE_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -68,6 +77,7 @@ export class IncentivesController {
 
   @Patch(':id')
   @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @RequirePermissions(Permissions.INCENTIVE_CREATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateIncentiveDto,
@@ -78,6 +88,7 @@ export class IncentivesController {
 
   @Delete(':id')
   @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @RequirePermissions(Permissions.INCENTIVE_CREATE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

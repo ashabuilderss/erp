@@ -42,6 +42,38 @@ export function useUpload() {
     }
   };
 
+  const uploadAvatar = async (file: File): Promise<UploadResponse> => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/proxy/uploads/avatar", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Avatar upload failed");
+      return (await res.json()) as UploadResponse;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const uploadAttendanceSelfie = async (file: File): Promise<UploadResponse> => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/proxy/uploads/attendance-selfie", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Attendance selfie upload failed");
+      return (await res.json()) as UploadResponse;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const deleteUpload = async (key: string): Promise<void> => {
     setUploading(true);
     try {
@@ -54,5 +86,12 @@ export function useUpload() {
     }
   };
 
-  return { uploadPropertyImages, uploadGeneral, deleteUpload, uploading };
+  return {
+    uploadPropertyImages,
+    uploadGeneral,
+    uploadAvatar,
+    uploadAttendanceSelfie,
+    deleteUpload,
+    uploading,
+  };
 }

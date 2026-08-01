@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../config/prisma.service';
+import { TransitionService } from '../../../common/services/transition.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { QueryEmployeeDto } from './dto/query-employee.dto';
@@ -19,27 +20,59 @@ const ALLOWED_SORT = [
   'dateOfJoining',
 ] as const;
 
+function normalizeEmployee(emp: any): any {
+  if (!emp) return emp;
+  const result = { ...emp };
+  if (result.users !== undefined) { result.user = result.users; delete result.users; }
+  if (result.departments !== undefined) { result.department = result.departments; delete result.departments; }
+  if (result.designations !== undefined) { result.designation = result.designations; delete result.designations; }
+  return result;
+}
+
 @Injectable()
 export class EmployeesService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private transitionService: TransitionService,
   ) {}
 
   async getMyProfile(userId: string, role?: UserRole) {
     const employee = await this.prisma.employee.findUnique({
       where: { userId },
       include: {
-        user: true,
-        department: true,
-        designation: true,
-        manager: { include: { user: true } },
+        users: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            role: true,
+          },
+        },
+        departments: true,
+        designations: true,
+        employees: {
+          include: {
+            users: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+              },
+            },
+          },
+        },
       },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
+
+    // Strip sensitive fields for EMPLOYEE role
     if (role === UserRole.EMPLOYEE) {
-      const { ...rest } = employee;
-      return rest;
+      const { salary, phone, address, ...safeProfile } = employee;
+      return safeProfile;
     }
     return employee;
   }
@@ -139,10 +172,10 @@ export class EmployeesService {
         staffType: dto.staffType,
       },
       include: {
-        user: true,
-        department: true,
-        designation: true,
-        manager: true,
+        users: true,
+        departments: true,
+        designations: true,
+        employees: true,
       },
     });
 
@@ -153,7 +186,7 @@ export class EmployeesService {
     return employee;
   }
 
-  async findAll(query: QueryEmployeeDto, companyId: string) {
+  async findAll(query: QueryEmployeeDto, scopeFilter?: Record<string, any>, role?: string) {
     const {
       page = 1,
       limit = 10,
@@ -165,14 +198,17 @@ export class EmployeesService {
       sortOrder = 'desc',
     } = query;
 
-    const where: Prisma.EmployeeWhereInput = { companyId };
+    const where: Prisma.EmployeeWhereInput = {
+      companyId: scopeFilter?.companyId ?? '',
+      ...scopeFilter,
+    };
 
     if (search) {
       where.OR = [
         { employeeCode: { contains: search, mode: 'insensitive' } },
-        { user: { firstName: { contains: search, mode: 'insensitive' } } },
-        { user: { lastName: { contains: search, mode: 'insensitive' } } },
-        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { users: { firstName: { contains: search, mode: 'insensitive' } } },
+        { users: { lastName: { contains: search, mode: 'insensitive' } } },
+        { users: { email: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -180,24 +216,52 @@ export class EmployeesService {
     if (designationId) where.designationId = designationId;
     if (status) where.status = status;
 
+    const includeManagerInfo = {
+      users: {
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+        },
+      },
+      departments: true,
+      designations: true,
+      employees: {
+        include: {
+          users: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+            },
+          },
+        },
+      },
+    };
+
     const [data, total] = await Promise.all([
       this.prisma.employee.findMany({
         where,
         orderBy: { [safeSortBy(sortBy, ALLOWED_SORT, 'createdAt')]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
-        include: {
-          user: true,
-          department: true,
-          designation: true,
-          manager: { include: { user: true } },
-        },
+        include: includeManagerInfo,
       }),
       this.prisma.employee.count({ where }),
     ]);
 
+    // Strip salary for non-privileged roles
+    const canViewSalary = ([UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.ACCOUNTS] as string[]).includes(role as string);
+    const sanitizedData = canViewSalary
+      ? data.map(normalizeEmployee)
+      : data.map(({ salary, phone, address, ...rest }: any) => normalizeEmployee(rest));
+
     return {
-      data,
+      data: sanitizedData,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -206,22 +270,31 @@ export class EmployeesService {
     const employee = await this.prisma.employee.findFirst({
       where: { id, companyId },
       include: {
-        user: true,
-        department: true,
-        designation: true,
-        manager: { include: { user: true } },
-        subordinates: { include: { user: true } },
-        attendance: true,
-        leaveRequests: true,
+        users: true,
+        departments: true,
+        designations: true,
+        employees: { include: { users: true } },
+        otherEmployees: { include: { users: true } },
+        attendanceDayAggregates: true,
+        leaveRequestsLeaveRequestsEmployeeIdToemployees: true,
       },
     });
     if (!employee)
       throw new NotFoundException(`Employee with ID ${id} not found`);
-    return employee;
+    return normalizeEmployee(employee);
   }
 
   async update(id: string, dto: UpdateEmployeeDto, companyId: string) {
-    await this.findOne(id, companyId);
+    const employee = await this.findOne(id, companyId);
+
+    // Validate employee status transition if status is being changed
+    if (dto.status && dto.status !== employee.status) {
+      this.transitionService.validate(
+        'Employee',
+        employee.status,
+        dto.status,
+      );
+    }
 
     if (dto.userId !== undefined) {
       if (dto.userId) {
@@ -283,19 +356,49 @@ export class EmployeesService {
       where: { id },
       data,
       include: {
-        user: true,
-        department: true,
-        designation: true,
-        manager: { include: { user: true } },
+        users: true,
+        departments: true,
+        designations: true,
+        employees: { include: { users: true } },
       },
     });
     this.eventEmitter.emit('employee.updated', { companyId, entityId: id });
     return updated;
   }
 
+  async invite(id: string, email: string, companyId: string) {
+    const employee = await this.findOne(id, companyId);
+    if (!employee.userId) {
+      throw new BadRequestException('Employee has no linked user account');
+    }
+    const { randomBytes } = await import('crypto');
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await this.prisma.tempToken.create({
+      data: {
+        token,
+        userId: employee.userId,
+        companyId,
+        purpose: 'EMPLOYEE_INVITE',
+        expiresAt,
+      },
+    });
+
+    this.eventEmitter.emit('employee.invited', {
+      companyId,
+      entityId: id,
+      email: email || employee.users?.email,
+      token,
+    });
+
+    return { success: true };
+  }
+
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    const result = await this.prisma.employee.delete({ where: { id } });
+    const result = await this.prisma.employee.update({ where: { id }, data: { deletedAt: new Date() } });
     this.eventEmitter.emit('employee.deleted', { companyId, entityId: id });
     return result;
   }
@@ -311,5 +414,65 @@ export class EmployeesService {
     }
 
     return { success: true };
+  }
+
+  // ── Cross-module query methods ──────────────────────────────────
+  // These methods provide a clean service-layer API for other modules
+  // that need employee data, replacing direct Prisma.employee queries.
+
+  /** Employee with company settings — used by AttendanceService for timezone. */
+  async findByIdWithCompanySettings(employeeId: string, companyId: string) {
+    return this.prisma.employee.findFirst({
+      where: { id: employeeId, companyId },
+      include: { companies: { select: { settings: true } } },
+    });
+  }
+
+  /** Active employees with salary — used by PayrollService for payslip generation. */
+  async findActiveForPayroll(companyId: string) {
+    return this.prisma.employee.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      select: { id: true, salary: true, dateOfJoining: true },
+    });
+  }
+
+  /** Count of active employees — used by Attendance/Dashboard modules. */
+  async countActive(companyId: string) {
+    return this.prisma.employee.count({
+      where: { companyId, status: 'ACTIVE' },
+    });
+  }
+
+  /** Basic active employee list — used by AttendanceService for dashboard data. */
+  async findActiveBasic(companyId: string, limit = 50) {
+    return this.prisma.employee.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      select: {
+        id: true,
+        employeeCode: true,
+        users: { select: { firstName: true, lastName: true } },
+      },
+      take: limit,
+    });
+  }
+
+  /** Employee by userId — used by LeaveRequests/AttendanceCorrections for validation. */
+  async findByUserId(userId: string, companyId?: string) {
+    const where: { userId: string; companyId?: string } = { userId };
+    if (companyId) where.companyId = companyId;
+    return this.prisma.employee.findFirst({ where });
+  }
+
+  /** Employee by id (minimal fields) — used by LeaveRequests for validation. */
+  async findBasicById(employeeId: string) {
+    return this.prisma.employee.findUnique({ where: { id: employeeId } });
+  }
+
+  /** Employee by id scoped to company (minimal fields) — used by AttendanceCorrections. */
+  async findBasicByIdAndCompany(employeeId: string, companyId: string) {
+    return this.prisma.employee.findFirst({
+      where: { id: employeeId, companyId },
+      select: { id: true, userId: true },
+    });
   }
 }

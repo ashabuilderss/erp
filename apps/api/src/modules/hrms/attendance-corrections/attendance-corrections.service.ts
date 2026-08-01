@@ -6,11 +6,24 @@ import {
 import { PrismaService } from '../../../config/prisma.service';
 import { CreateAttendanceCorrectionDto } from './dto/create-attendance-correction.dto';
 import { QueryAttendanceCorrectionDto } from './dto/query-attendance-correction.dto';
-import { CorrectionStatus } from '@prisma/client';
+import { ApprovalsSpawningService, ApprovalsRuntimeService } from '../../approvals';
+import { AttendanceFinalizationService } from '../attendance/attendance-finalization.service';
+import { EmployeesService } from '../employees/employees.service';
+import { GovernanceEventPublisher } from '../../governance-events/governance-event.publisher';
+import { DomainEventTypes } from '../../governance-events/types/events';
+import { AttendanceHistoryService } from '../attendance/attendance-history.service';
 
 @Injectable()
 export class AttendanceCorrectionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly approvalsSpawning: ApprovalsSpawningService,
+    private readonly approvalsRuntime: ApprovalsRuntimeService,
+    private readonly finalizationService: AttendanceFinalizationService,
+    private readonly employeesService: EmployeesService,
+    private readonly eventPublisher: GovernanceEventPublisher,
+    private readonly historyService: AttendanceHistoryService,
+  ) {}
 
   async create(
     dto: CreateAttendanceCorrectionDto,
@@ -20,46 +33,108 @@ export class AttendanceCorrectionsService {
     const correctionDate = new Date(dto.date);
     correctionDate.setUTCHours(0, 0, 0, 0);
 
-    return this.prisma.attendanceCorrection.create({
-      data: {
-        employeeId,
-        companyId,
-        attendanceId: dto.attendanceId,
-        date: correctionDate,
-        reason: dto.reason,
-        requestedCheckIn: dto.requestedCheckIn
-          ? new Date(dto.requestedCheckIn)
-          : undefined,
-        requestedCheckOut: dto.requestedCheckOut
-          ? new Date(dto.requestedCheckOut)
-          : undefined,
-        requestedStatus: dto.requestedStatus,
-      },
+    const employee = await this.employeesService.findBasicByIdAndCompany(employeeId, companyId);
+    if (!employee?.userId) {
+      throw new BadRequestException(
+        'Employee user account is required for correction approval',
+      );
+    }
+    const employeeUserId = employee.userId;
+
+    const dayAggregate = await this.prisma.attendanceDayAggregate.findFirst({
+      where: { employeeId, companyId, date: correctionDate },
     });
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const correction = await tx.attendanceCorrection.create({
+        data: {
+          employeeId,
+          companyId,
+          reason: dto.reason,
+          dayAggregateId: dayAggregate?.id,
+          requestedCheckIn: dto.requestedCheckIn,
+          requestedCheckOut: dto.requestedCheckOut,
+          requestedStatus: dto.requestedStatus,
+        },
+      });
+
+      const approval = await this.approvalsSpawning.spawnRequest(
+        companyId,
+        'AttendanceCorrection',
+        correction.id,
+        employeeUserId,
+      );
+
+      const updated = await tx.attendanceCorrection.update({
+        where: { id: correction.id },
+        data: { approvalRequestId: approval.id },
+      });
+
+      await this.historyService.record({
+        tx,
+        companyId,
+        targetType: 'AttendanceCorrection',
+        targetId: correction.id,
+        actorId: employeeId,
+        transitionType: 'CORRECTION_REQUESTED',
+        newState: 'PENDING',
+        reason: dto.reason,
+      });
+
+      await this.eventPublisher.publish(tx, {
+        eventType: DomainEventTypes.ATTENDANCE_CORRECTION_REQUESTED,
+        entityId: correction.id,
+        entityType: 'AttendanceCorrection',
+        companyId,
+        payload: {
+          companyId,
+          correctionId: correction.id,
+          employeeId,
+        },
+      });
+
+      return updated;
+    });
+
+    return result;
   }
 
   async findAll(query: QueryAttendanceCorrectionDto, companyId: string) {
     const where: any = { companyId };
-    if (query.status) where.status = query.status;
     if (query.employeeId) where.employeeId = query.employeeId;
 
-    const total = await this.prisma.attendanceCorrection.count({ where });
-    const data = await this.prisma.attendanceCorrection.findMany({
-      where,
-      skip: ((query.page ?? 1) - 1) * (query.limit ?? 10),
-      take: query.limit ?? 10,
-      include: {
-        employee: {
-          include: { user: { select: { firstName: true, lastName: true } } },
+    const [data, total] = await Promise.all([
+      this.prisma.attendanceCorrection.findMany({
+        where,
+        skip: ((query.page ?? 1) - 1) * (query.limit ?? 10),
+        take: query.limit ?? 10,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          approvalRequests: {
+            select: {
+              status: true,
+              approvalHistories: { select: { comments: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+          },
+          employees: { include: { users: true } },
         },
-        approvedBy: {
-          include: { user: { select: { firstName: true, lastName: true } } },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+      }),
+      this.prisma.attendanceCorrection.count({ where }),
+    ]);
+
+    let filtered = data.map((c) => ({
+      ...c,
+      status: c.approvalRequests?.status ?? 'PENDING',
+      notes: c.approvalRequests?.approvalHistories?.[0]?.comments ?? null,
+      employee: c.employees,
+    }));
+
+    if (query.status) {
+      filtered = filtered.filter((c) => c.status === query.status);
+    }
+
     return {
-      data,
+      data: filtered,
       meta: {
         total,
         page: query.page ?? 1,
@@ -70,31 +145,38 @@ export class AttendanceCorrectionsService {
   }
 
   async findMyCorrections(employeeId: string) {
-    return this.prisma.attendanceCorrection.findMany({
+    const corrections = await this.prisma.attendanceCorrection.findMany({
       where: { employeeId },
+      orderBy: { createdAt: 'desc' },
       include: {
-        approvedBy: {
-          include: { user: { select: { firstName: true, lastName: true } } },
+        approvalRequests: {
+          select: {
+            status: true,
+            approvalHistories: { select: { comments: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          },
         },
       },
-      orderBy: { createdAt: 'desc' },
     });
+
+    return corrections.map((c) => ({
+      ...c,
+      status: c.approvalRequests?.status ?? 'PENDING',
+      notes: c.approvalRequests?.approvalHistories?.[0]?.comments ?? null,
+    }));
   }
 
   async findOne(id: string, companyId: string) {
     const correction = await this.prisma.attendanceCorrection.findFirst({
       where: { id, companyId },
       include: {
-        employee: {
-          include: { user: { select: { firstName: true, lastName: true } } },
-        },
-        approvedBy: {
-          include: { user: { select: { firstName: true, lastName: true } } },
-        },
+        employees: true,
+        attendanceDayAggregates: true,
+        attendanceEvidence: true,
       },
     });
-    if (!correction)
+    if (!correction) {
       throw new NotFoundException('Attendance correction not found');
+    }
     return correction;
   }
 
@@ -105,47 +187,60 @@ export class AttendanceCorrectionsService {
     notes?: string,
   ) {
     const correction = await this.findOne(id, companyId);
-    if (correction.status !== CorrectionStatus.PENDING) {
-      throw new BadRequestException('Correction is not in PENDING status');
+    if (!correction.approvalRequestId) {
+      throw new BadRequestException(
+        'Attendance correction has no approval request',
+      );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const existingAttendance = await tx.attendance.findUnique({
-        where: {
-          companyId_employeeId_date: {
-            companyId: correction.companyId,
-            employeeId: correction.employeeId,
-            date: correction.date,
-          },
-        },
-      });
+    await this.approvalsRuntime.approveStep(
+      correction.approvalRequestId,
+      approvedById,
+      notes,
+    );
 
-      if (existingAttendance) {
-        const attUpdate: any = {};
-        if (correction.requestedCheckIn)
-          attUpdate.checkIn = correction.requestedCheckIn;
-        if (correction.requestedCheckOut)
-          attUpdate.checkOut = correction.requestedCheckOut;
-        if (correction.requestedStatus)
-          attUpdate.status = correction.requestedStatus;
-        if (Object.keys(attUpdate).length > 0) {
-          await tx.attendance.update({
-            where: { id: existingAttendance.id },
-            data: attUpdate,
-          });
-        }
-      }
-
-      return tx.attendanceCorrection.update({
-        where: { id },
-        data: {
-          status: CorrectionStatus.APPROVED,
-          approvedById,
-          approvedAt: new Date(),
-          notes,
-        },
-      });
+    const approval = await this.prisma.approvalRequest.findFirst({
+      where: { id: correction.approvalRequestId, companyId },
     });
+
+    if (approval?.status === 'APPROVED') {
+      await this.prisma.$transaction(async (tx) => {
+        await this.historyService.record({
+          tx,
+          companyId,
+          targetType: 'AttendanceCorrection',
+          targetId: id,
+          actorId: approvedById,
+          transitionType: 'CORRECTION_APPROVED',
+          previousState: 'PENDING',
+          newState: 'APPROVED',
+        });
+
+        await this.eventPublisher.publish(tx, {
+          eventType: DomainEventTypes.ATTENDANCE_CORRECTION_APPROVED,
+          entityId: id,
+          entityType: 'AttendanceCorrection',
+          companyId,
+          payload: {
+            companyId,
+            correctionId: id,
+            employeeId: correction.employeeId,
+            approvedById,
+          },
+        });
+      });
+
+      if (correction.attendanceDayAggregates) {
+        await this.refinalizeCorrectionDay(
+          companyId,
+          approvedById,
+          correction.attendanceDayAggregates.date,
+          correction.id,
+        );
+      }
+    }
+
+    return this.findOne(id, companyId);
   }
 
   async reject(
@@ -155,17 +250,83 @@ export class AttendanceCorrectionsService {
     notes?: string,
   ) {
     const correction = await this.findOne(id, companyId);
-    if (correction.status !== CorrectionStatus.PENDING) {
-      throw new BadRequestException('Correction is not in PENDING status');
+    if (!correction.approvalRequestId) {
+      throw new BadRequestException(
+        'Attendance correction has no approval request',
+      );
     }
-    return this.prisma.attendanceCorrection.update({
-      where: { id },
-      data: {
-        status: CorrectionStatus.REJECTED,
-        approvedById,
-        approvedAt: new Date(),
-        notes,
+
+    await this.approvalsRuntime.rejectStep(
+      correction.approvalRequestId,
+      approvedById,
+      notes,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.historyService.record({
+        tx,
+        companyId,
+        targetType: 'AttendanceCorrection',
+        targetId: id,
+        actorId: approvedById,
+        transitionType: 'CORRECTION_REJECTED',
+        previousState: 'PENDING',
+        newState: 'REJECTED',
+        reason: notes,
+      });
+
+      await this.eventPublisher.publish(tx, {
+        eventType: DomainEventTypes.ATTENDANCE_CORRECTION_REJECTED,
+        entityId: id,
+        entityType: 'AttendanceCorrection',
+        companyId,
+        payload: {
+          companyId,
+          correctionId: id,
+          employeeId: correction.employeeId,
+          rejectedById: approvedById,
+        },
+      });
+    });
+
+    return this.findOne(id, companyId);
+  }
+
+  private async refinalizeCorrectionDay(
+    companyId: string,
+    finalizedById: string,
+    date: Date,
+    correctionId: string,
+  ) {
+    const period = await this.prisma.attendancePeriod.findFirst({
+      where: {
+        companyId,
+        startDate: { lte: date },
+        endDate: { gte: date },
+        status: { not: 'PAYROLL_LOCKED' },
       },
+    });
+    if (!period) return;
+
+    const correction = await this.prisma.attendanceCorrection.findFirst({
+      where: { id: correctionId },
+    });
+
+    const correctionOverrides = correction?.dayAggregateId
+      ? [
+          {
+            dayAggregateId: correction.dayAggregateId,
+            requestedCheckIn: correction.requestedCheckIn ?? undefined,
+            requestedCheckOut: correction.requestedCheckOut ?? undefined,
+          },
+        ]
+      : [];
+
+    await this.finalizationService.finalizePeriod({
+      companyId,
+      attendancePeriodId: period.id,
+      finalizedById,
+      correctionOverrides,
     });
   }
 }

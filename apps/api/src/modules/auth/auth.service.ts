@@ -58,23 +58,53 @@ export class AuthService {
     return mergePermissionsWithGrants(getPermissionsForRole(role), grants);
   }
 
-  async login(email: string, password: string, ipAddress?: string) {
+  async precheck(email: string, password: string) {
     const user = await this.prisma.user.findFirst({
       where: { email, isActive: true },
     });
     if (!user || !user.hashedPassword) {
-      this.eventEmitter.emit('security.login.failure', { email, reason: 'User not found or no password', ipAddress });
       throw new UnauthorizedException('Invalid email or password');
     }
     const valid = await bcrypt.compare(password, user.hashedPassword);
     if (!valid) {
-      this.eventEmitter.emit('security.login.failure', { email, reason: 'Invalid password', ipAddress });
       throw new UnauthorizedException('Invalid email or password');
     }
 
     if (user.totpEnabled) {
       return this.twoFactorService.generateChallenge(user.id, user.companyId);
     }
+
+    return { requiresTwoFactor: false };
+  }
+
+  async login(email: string, password: string, ipAddress?: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { email, isActive: true },
+    });
+    if (!user || !user.hashedPassword) {
+      this.eventEmitter.emit('security.login.failure', {
+        email,
+        reason: 'User not found or no password',
+        ipAddress,
+      });
+      throw new UnauthorizedException('Invalid email or password');
+    }
+    const valid = await bcrypt.compare(password, user.hashedPassword);
+    if (!valid) {
+      this.eventEmitter.emit('security.login.failure', {
+        email,
+        reason: 'Invalid password',
+        ipAddress,
+      });
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (user.totpEnabled) {
+      return this.twoFactorService.generateChallenge(user.id, user.companyId);
+    }
+
+    // Revoke old tokens on login (prevents session fixation)
+    await this.revokeAllUserTokens(user.id);
 
     const employee = await this.prisma.employee.findUnique({
       where: { userId: user.id },
@@ -121,11 +151,16 @@ export class AuthService {
     const tokenHash = hashToken(refreshTokenStr);
     const stored = await this.prisma.refreshToken.findUnique({
       where: { token: tokenHash },
-      include: { user: { include: { employee: true } } },
+      include: { users: { include: { employees: true } } },
     });
 
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // Block refresh for deactivated users
+    if (!stored.users.isActive) {
+      throw new UnauthorizedException('Account has been deactivated');
     }
 
     await this.prisma.refreshToken.update({
@@ -133,11 +168,11 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    const employee = stored.user.employee;
+    const employee = stored.users.employees;
     const payload = {
-      sub: stored.user.id,
-      email: stored.user.email,
-      role: stored.user.role,
+      sub: stored.users.id,
+      email: stored.users.email,
+      role: stored.users.role,
       companyId: stored.companyId,
       employeeId: employee?.id ?? null,
     };
@@ -259,8 +294,17 @@ export class AuthService {
 
     const targetRole = dto.role || UserRole.EMPLOYEE;
 
-    if (requesterRole !== UserRole.ADMIN && targetRole !== UserRole.EMPLOYEE) {
-      throw new BadRequestException('HR can only create employee accounts');
+    // Only OWNER can create OWNER or ADMIN accounts
+    if (
+      (targetRole === UserRole.OWNER || targetRole === UserRole.ADMIN) &&
+      requesterRole !== UserRole.OWNER
+    ) {
+      throw new BadRequestException('Only OWNER can create OWNER or ADMIN accounts');
+    }
+
+    // HR_MANAGER can only create EMPLOYEE accounts
+    if (requesterRole !== UserRole.ADMIN && requesterRole !== UserRole.OWNER && targetRole !== UserRole.EMPLOYEE) {
+      throw new BadRequestException('Only ADMIN and OWNER can create non-employee accounts');
     }
 
     const hashedPassword = dto.password
@@ -295,7 +339,7 @@ export class AuthService {
             address: dto.address,
             status: 'ACTIVE',
           },
-          include: { user: true, department: true, designation: true },
+          include: { users: true, departments: true, designations: true },
         });
         return { user, employee };
       }
@@ -316,5 +360,92 @@ export class AuthService {
       where: { id: userId },
       select: { totpEnabled: true },
     });
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    opts?: { totpToken?: string; ipAddress?: string },
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+        companyId: true,
+        hashedPassword: true,
+        totpEnabled: true,
+      },
+    });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+    if (!user.hashedPassword) {
+      throw new BadRequestException('No password set for this account');
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.hashedPassword);
+    if (!valid) {
+      this.eventEmitter.emit('security.password.change.failure', {
+        userId,
+        companyId: user.companyId,
+        ipAddress: opts?.ipAddress,
+        reason: 'Invalid current password',
+      });
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // §3.1: cannot reuse the last 5 passwords
+    const recent = await this.prisma.passwordHistory.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    for (const entry of recent) {
+      if (await bcrypt.compare(newPassword, entry.hashedPassword)) {
+        throw new BadRequestException(
+          'New password must differ from the last 5 passwords',
+        );
+      }
+    }
+
+    // §3.1: TOTP re-challenge for 2FA-enabled accounts (Owner / Admin are
+    // required to have 2FA enrolled).
+    if (user.totpEnabled) {
+      if (!opts?.totpToken) {
+        throw new UnauthorizedException(
+          'A TOTP verification code is required for this account',
+        );
+      }
+      await this.twoFactorService.verifyTotp(userId, opts.totpToken);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { hashedPassword },
+      });
+      await tx.passwordHistory.create({
+        data: {
+          userId,
+          companyId: user.companyId,
+          hashedPassword,
+        },
+      });
+    });
+
+    // §3.1: security audit log entry
+    this.eventEmitter.emit('security.password.change', {
+      userId,
+      companyId: user.companyId,
+    });
+
+    // Revoke all existing refresh tokens to force re-login
+    await this.revokeAllUserTokens(userId);
+
+    return { success: true, message: 'Password changed successfully. Please log in again.' };
   }
 }

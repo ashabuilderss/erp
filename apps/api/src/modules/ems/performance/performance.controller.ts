@@ -13,12 +13,15 @@ import { CreatePerformanceDto } from './dto/create-performance.dto';
 import { UpdatePerformanceDto } from './dto/update-performance.dto';
 import { QueryPerformanceDto } from './dto/query-performance.dto';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { Permissions } from '../../../common/auth/permissions';
 import {
   CurrentCompany,
   CurrentEmployeeId,
   CurrentUser,
 } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
 
 @Controller('performance')
 export class PerformanceController {
@@ -26,6 +29,7 @@ export class PerformanceController {
 
   @Get('me')
   @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.EMS_READ)
   async getMyPerformance(
     @CurrentEmployeeId() employeeId: string | null,
     @CurrentCompany('id') companyId: string,
@@ -37,7 +41,9 @@ export class PerformanceController {
   }
 
   @Post()
+  @UseIdempotency()
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.EMS_CREATE)
   async create(
     @Body() dto: CreatePerformanceDto,
     @CurrentCompany('id') companyId: string,
@@ -47,6 +53,7 @@ export class PerformanceController {
 
   @Get()
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.EMS_READ)
   async findAll(
     @Query() query: QueryPerformanceDto,
     @CurrentCompany('id') companyId: string,
@@ -56,6 +63,7 @@ export class PerformanceController {
 
   @Get('average')
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.EMS_READ)
   async getAverage(
     @CurrentCompany('id') companyId: string,
     @Query('year') year?: number,
@@ -66,6 +74,7 @@ export class PerformanceController {
 
   @Get('employee/:employeeId')
   @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @RequirePermissions(Permissions.EMS_READ)
   async getByEmployee(
     @Param('employeeId') employeeId: string,
     @CurrentCompany('id') companyId: string,
@@ -83,6 +92,7 @@ export class PerformanceController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.EMS_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -92,6 +102,7 @@ export class PerformanceController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.EMS_CREATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdatePerformanceDto,
@@ -102,6 +113,7 @@ export class PerformanceController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermissions(Permissions.EMS_CREATE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

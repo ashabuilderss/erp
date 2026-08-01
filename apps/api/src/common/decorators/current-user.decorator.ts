@@ -1,21 +1,5 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    companyId: string;
-    employeeId: string | null;
-  };
-  company: {
-    id: string;
-    name: string;
-    slug: string;
-  };
-}
+import { AuthenticatedRequest } from '../interfaces/request.interface';
 
 export const CurrentUser = createParamDecorator(
   (data: string | undefined, ctx: ExecutionContext) => {

@@ -21,11 +21,14 @@ describe('LocalStorageProvider', () => {
   it.each([
     ['a traversal key', () => relative(uploadsDir, outsideFile)],
     ['an absolute key', () => outsideFile],
-  ])('does not delete a file outside the uploads root via %s', async (_, key) => {
-    const provider = new LocalStorageProvider();
+  ])(
+    'does not delete a file outside the uploads root via %s',
+    async (_, key) => {
+      const provider = new LocalStorageProvider();
 
-    await provider.delete(key());
+      await provider.delete(key());
 
-    expect(fs.existsSync(outsideFile)).toBe(true);
-  });
+      expect(fs.existsSync(outsideFile)).toBe(true);
+    },
+  );
 });

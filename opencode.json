@@ -1,28 +1,85 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "playwright": {
-      "type": "local",
-      "command": ["npx", "@playwright/mcp@latest", "--headless", "--browser", "chromium"],
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
       "enabled": true
     },
-    "filesystem": {
-      "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\Nikhil Dhiman\\Desktop\\dashboard"],
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {},
       "enabled": true
     },
-    "postgres": {
-      "type": "local",
-      "command": ["npx", "-y", "@yawlabs/postgres-mcp", "postgresql://postgres:postgres@127.0.0.1:5433/realestate_crm"],
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app",
       "enabled": true
     },
-    "subagents": {
+    "mcp_everything": {
       "type": "local",
-      "command": ["npx", "-y", "mcp-subagents-opencode"],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+      "enabled": true
+    },
+    "mcp_github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
       "enabled": true,
       "environment": {
-        "OPENCODE_BIN": "C:\\Users\\Nikhil Dhiman\\AppData\\Local\\opencode\\opencode-cli.exe"
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
       }
+    },
+    "mcp_filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+      "enabled": true
+    },
+    "mcp_brave_search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "enabled": true,
+      "environment": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
+      }
+    },
+    "mcp_postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres"],
+      "enabled": true,
+      "environment": {
+        "POSTGRES_CONNECTION_STRING": "{env:POSTGRES_CONNECTION_STRING}"
+      }
+    },
+    "mcp_puppeteer": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-puppeteer"],
+      "enabled": true
+    },
+    "mcp_memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true
     }
-  }
+  },
+  "plugin": [
+    "opencode-wakatime",
+    "opencode-helicone-session",
+    "opencode-vibeguard",
+    "opencode-supermemory",
+    "opencode-openai-codex-auth",
+    "opencode-gemini-auth",
+    "opencode-antigravity-auth",
+    "opencode-google-antigravity-auth",
+    "opencode-sentry-monitor",
+    "opencode-background-agents",
+    "opencode-zellij-namer",
+    "opencode-conductor",
+    "opencode-notify",
+    "opencode-goal-plugin",
+    "opencode-scheduler",
+    "opencode-worktree",
+    "opencode-websearch-cited"
+  ],
+  "lsp": true
 }

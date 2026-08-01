@@ -13,21 +13,27 @@ import {
   UpdateEscalationRuleDto,
 } from './dto/create-escalation-rule.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Permissions } from '../../common/auth/permissions';
 import { CurrentCompany } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../common/decorators/idempotency.decorator';
 
 @Controller('escalation-rules')
 export class EscalationRulesController {
   constructor(private readonly service: EscalationRulesService) {}
 
   @Get()
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.TEAM_LEAD)
+  @RequirePermissions(Permissions.ESCALATION_READ)
   async findAll(@CurrentCompany('id') companyId: string) {
     return this.service.findAll(companyId);
   }
 
   @Post()
-  @Roles(UserRole.OWNER)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.TEAM_LEAD)
+  @RequirePermissions(Permissions.ESCALATION_CREATE)
   async create(
     @Body() dto: CreateEscalationRuleDto,
     @CurrentCompany('id') companyId: string,
@@ -36,7 +42,8 @@ export class EscalationRulesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.OWNER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.TEAM_LEAD)
+  @RequirePermissions(Permissions.ESCALATION_CREATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateEscalationRuleDto,
@@ -46,7 +53,8 @@ export class EscalationRulesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.OWNER)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.TEAM_LEAD)
+  @RequirePermissions(Permissions.ESCALATION_CREATE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

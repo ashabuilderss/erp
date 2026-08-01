@@ -29,7 +29,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile.dev
-    command: ["sh", "-c", "set -e; npx prisma migrate deploy && npm test -- --runInBand"]
+    command: ["sh", "-c", "set -e; npx prisma db push --force-reset --accept-data-loss && npm test -- --runInBand"]
     environment:
       NODE_ENV: test
       DATABASE_URL: postgresql://test:test@test-postgres:5432/dashboard_test
@@ -52,7 +52,7 @@ services:
       [
         "sh",
         "-c",
-        "set -e; npx prisma migrate deploy && npm run test:e2e",
+        "set -e; npx prisma db push --force-reset --accept-data-loss && NODE_OPTIONS='--max-old-space-size=8192' npm run test:e2e",
       ]
     environment:
       NODE_ENV: test

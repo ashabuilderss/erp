@@ -13,18 +13,22 @@ import {
   UpdatePaymentEntryDto,
 } from './dto/create-payment-entry.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Permissions } from '../../common/auth/permissions';
 import {
   CurrentCompany,
   CurrentUser,
 } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../common/decorators/idempotency.decorator';
 
 @Controller('payment-entries')
 export class PaymentEntriesController {
   constructor(private readonly service: PaymentEntriesService) {}
 
   @Get('booking/:bookingId')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_READ)
   async findByBooking(
     @Param('bookingId') bookingId: string,
     @CurrentCompany('id') companyId: string,
@@ -33,7 +37,9 @@ export class PaymentEntriesController {
   }
 
   @Post('booking/:bookingId')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_CREATE)
   async create(
     @Param('bookingId') bookingId: string,
     @Body() dto: CreatePaymentEntryDto,
@@ -44,7 +50,8 @@ export class PaymentEntriesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_CREATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdatePaymentEntryDto,
@@ -54,7 +61,8 @@ export class PaymentEntriesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTS)
+  @RequirePermissions(Permissions.PAYMENT_CREATE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

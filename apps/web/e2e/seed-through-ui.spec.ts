@@ -75,21 +75,21 @@ async function backendAuth() {
 
 async function apiCreate(endpoint: string, data: Record<string, any>) {
   const headers = await backendAuth();
-  const resp = await page.request.post(`${BACKEND_URL}/api/${endpoint}`, { headers, data });
+  const resp = await page.request.post(`${BACKEND_URL}/api/v1/${endpoint}`, { headers, data });
   expect(resp.ok()).toBeTruthy();
   return resp.json();
 }
 
 async function apiGet(endpoint: string) {
   const headers = await backendAuth();
-  const resp = await page.request.get(`${BACKEND_URL}/api/${endpoint}`, { headers });
+  const resp = await page.request.get(`${BACKEND_URL}/api/v1/${endpoint}`, { headers });
   if (!resp.ok()) return null;
   return resp.json();
 }
 
 async function getAllIds(endpoint: string): Promise<string[]> {
   const headers = await backendAuth();
-  const resp = await page.request.get(`${BACKEND_URL}/api/${endpoint}?limit=100`, { headers });
+  const resp = await page.request.get(`${BACKEND_URL}/api/v1/${endpoint}?limit=100`, { headers });
   if (!resp.ok()) return [];
   const body = await resp.json();
   const items = body.data ?? body ?? [];
@@ -98,7 +98,7 @@ async function getAllIds(endpoint: string): Promise<string[]> {
 
 async function apiDelete(endpoint: string, id: string) {
   const headers = await backendAuth();
-  await page.request.delete(`${BACKEND_URL}/api/${endpoint}/${id}`, { headers }).catch(() => {});
+  await page.request.delete(`${BACKEND_URL}/api/v1/${endpoint}/${id}`, { headers }).catch(() => {});
 }
 
 test.describe.serial("Seed All Modules Through UI", () => {
@@ -109,8 +109,8 @@ test.describe.serial("Seed All Modules Through UI", () => {
   let salesMgrEmployeeId: string;
   let salesExecEmployeeId: string;
   let opsExecEmployeeId: string;
-  let deptIds: Record<string, string> = {};
-  let desigIds: Record<string, string> = {};
+  const deptIds: Record<string, string> = {};
+  const desigIds: Record<string, string> = {};
   let propertyIds: string[] = [];
   let customerIds: string[] = [];
   let leadIds: string[] = [];
@@ -119,7 +119,7 @@ test.describe.serial("Seed All Modules Through UI", () => {
   let siteIds: string[] = [];
 
   test("Phase 0: Clear existing seed data", async () => {
-    const loginResp = await page.request.post(`${BACKEND_URL}/api/auth/login`, { data: { email: "owner@company.com", password: "Owner@123" } });
+    const loginResp = await page.request.post(`${BACKEND_URL}/api/v1/auth/login`, { data: { email: "owner@company.com", password: "Owner@123" } });
     const loginBody = await loginResp.json();
     expect(loginBody.accessToken).toBeTruthy();
     backendJwt = loginBody.accessToken;
@@ -328,13 +328,15 @@ test.describe.serial("Seed All Modules Through UI", () => {
 
   test("Phase 6: Create Brokers via UI", async () => {
     const brokers = [
-      { name: "Property Junction Brokers", company: "Property Junction", phone: "+91-9876543212", email: "info@propertyjunction.com", rate: "2.5" },
-      { name: "Home Finders Realty", company: "Home Finders", phone: "+91-9876543213", email: "info@homefinders.com", rate: "1.5" },
+      { name: "Rajesh Kumar", companyName: "Kumar Associates", phone: "+91-9876543220" },
+      { name: "Sunita Verma", companyName: "Verma Realty", phone: "+91-9876543221" },
     ];
 
     for (const b of brokers) {
       await openDialogAndFill("brokers", "Add Broker", {
         Name: b.name,
+        Company: b.companyName,
+        Phone: b.phone,
       });
       await page.waitForTimeout(300);
     }
@@ -535,12 +537,6 @@ test.describe.serial("Seed All Modules Through UI", () => {
     const custResp = await apiGet("customers?limit=50");
     const customers = custResp?.data ?? custResp ?? [];
     const rohan = customers.find((c: any) => c.name.includes("Rohan"));
-
-    if (commerceHub) {
-      await page.request.patch(`/api/proxy/properties/${commerceHub.id}/status`, {
-        data: { status: "RESERVED" },
-      });
-    }
 
     const yesterday = new Date(Date.now() - 1 * 86400000).toISOString();
 

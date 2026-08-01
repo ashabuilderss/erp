@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,57 +10,31 @@ import { useToast } from "@/components/ui/toast";
 import { getApiErrorMessage } from "@/lib/api";
 import { Building2, Banknote, Calendar, Plus, Loader2 } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
+import {
+  useBookings,
+  usePaymentEntries,
+  usePaymentSchedules,
+  useCreatePaymentEntry,
+  useCreatePaymentSchedule,
+} from "@/hooks/api";
 
 const METHOD_LABELS: Record<string, string> = { CASH: "Cash", CHEQUE: "Cheque", ONLINE: "Online", BANK_TRANSFER: "Bank Transfer" };
 
 export default function PaymentsPage() {
-  const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showEntryForm, setShowEntryForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [entryForm, setEntryForm] = useState({ amount: "", method: "CASH", reference: "", paymentDate: "", notes: "" });
   const [scheduleForm, setScheduleForm] = useState({ installmentNumber: "1", amount: "", dueDate: "" });
 
-  const { data: bookingsData, isLoading: bookingsLoading } = useQuery({
-    queryKey: ["bookings"],
-    queryFn: () => api.get<any[]>("/bookings"),
-  });
-
-  const { data: schedules, isLoading: schedulesLoading } = useQuery({
-    queryKey: ["payment-schedules", selectedId],
-    queryFn: () => api.get<any[]>(`/payment-schedules/booking/${selectedId}`),
-    enabled: !!selectedId,
-  });
-
-  const { data: entries, isLoading: entriesLoading } = useQuery({
-    queryKey: ["payment-entries", selectedId],
-    queryFn: () => api.get<any[]>(`/payment-entries/booking/${selectedId}`),
-    enabled: !!selectedId,
-  });
+  const { data: bookingsData, isLoading: bookingsLoading } = useBookings();
+  const { data: schedules, isLoading: schedulesLoading } = usePaymentSchedules(selectedId);
+  const { data: entries, isLoading: entriesLoading } = usePaymentEntries(selectedId);
 
   const { showToast } = useToast();
 
-  const addEntry = useMutation({
-    mutationFn: () => api.post(`/payment-entries/booking/${selectedId}`, {
-      amount: parseFloat(entryForm.amount),
-      method: entryForm.method,
-      reference: entryForm.reference || undefined,
-      paymentDate: entryForm.paymentDate,
-      notes: entryForm.notes || undefined,
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["payment-entries"] }); qc.invalidateQueries({ queryKey: ["bookings"] }); setShowEntryForm(false); setEntryForm({ amount: "", method: "CASH", reference: "", paymentDate: "", notes: "" }); showToast("Payment recorded"); },
-    onError: (err) => showToast(getApiErrorMessage(err, "Failed to record payment"), "error"),
-  });
-
-  const addSchedule = useMutation({
-    mutationFn: () => api.post(`/payment-schedules/booking/${selectedId}`, {
-      installmentNumber: parseInt(scheduleForm.installmentNumber),
-      amount: parseFloat(scheduleForm.amount),
-      dueDate: scheduleForm.dueDate,
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["payment-schedules"] }); setShowScheduleForm(false); setScheduleForm({ installmentNumber: "1", amount: "", dueDate: "" }); showToast("Installment added"); },
-    onError: (err) => showToast(getApiErrorMessage(err, "Failed to add installment"), "error"),
-  });
+  const addEntry = useCreatePaymentEntry(selectedId);
+  const addSchedule = useCreatePaymentSchedule(selectedId);
 
   const raw = bookingsData as { data?: any[] } | any[] | undefined;
   const bookings = Array.isArray(raw) ? raw : (raw?.data ?? []);
@@ -126,9 +98,10 @@ export default function PaymentsPage() {
                   </CardTitle>
                   <Badge>{selected?.paymentStatus}</Badge>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
-                  <div><p className="text-sm text-muted-foreground">Total Scheduled</p><p className="text-lg font-semibold">₹{totalScheduled.toLocaleString()}</p></div>
-                  <div><p className="text-sm text-muted-foreground">Total Collected</p><p className="text-lg font-semibold">₹{totalPaid.toLocaleString()}</p></div>
+                <CardContent className="grid grid-cols-3 gap-4">
+                  <div><p className="text-sm text-muted-foreground">Total Scheduled</p><p className="text-lg font-semibold text-blue-600">₹{totalScheduled.toLocaleString()}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Total Collected</p><p className="text-lg font-semibold text-green-600">₹{totalPaid.toLocaleString()}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Outstanding</p><p className="text-lg font-semibold text-red-600">₹{Math.max(0, totalScheduled - totalPaid).toLocaleString()}</p></div>
                 </CardContent>
               </Card>
 
@@ -141,12 +114,29 @@ export default function PaymentsPage() {
                   {showScheduleForm && (
                     <div className="flex items-end gap-2 mb-4 p-3 bg-muted/50 rounded-lg">
                       <div><label className="text-xs">#</label><Input size={1} value={scheduleForm.installmentNumber} onChange={(e) => setScheduleForm(p => ({ ...p, installmentNumber: e.target.value }))} className="w-16" /></div>
-                       <div><label className="text-xs">Amount *</label><Input type="number" value={scheduleForm.amount} onChange={(e) => setScheduleForm(p => ({ ...p, amount: e.target.value }))} className="w-28" placeholder="0.00" /></div>
+                      <div><label className="text-xs">Amount *</label><Input type="number" value={scheduleForm.amount} onChange={(e) => setScheduleForm(p => ({ ...p, amount: e.target.value }))} className="w-28" placeholder="0.00" /></div>
                       <div><label className="text-xs">Due Date</label><Input type="date" value={scheduleForm.dueDate} onChange={(e) => setScheduleForm(p => ({ ...p, dueDate: e.target.value }))} className="w-36" /></div>
-                      <Button size="sm" onClick={() => { if (!scheduleForm.amount || !scheduleForm.dueDate) { showToast("Amount and due date are required", "error"); return; } addSchedule.mutate(); }} disabled={addSchedule.isPending}>Save</Button>
+                      <Button size="sm" onClick={() => {
+                        if (!scheduleForm.amount || !scheduleForm.dueDate) { showToast("Amount and due date are required", "error"); return; }
+                        addSchedule.mutate(
+                          {
+                            installmentNumber: parseInt(scheduleForm.installmentNumber),
+                            amount: parseFloat(scheduleForm.amount),
+                            dueDate: scheduleForm.dueDate,
+                          },
+                          {
+                            onSuccess: () => {
+                              setShowScheduleForm(false);
+                              setScheduleForm({ installmentNumber: "1", amount: "", dueDate: "" });
+                              showToast("Installment added");
+                            },
+                            onError: (err) => showToast(getApiErrorMessage(err, "Failed to add installment"), "error"),
+                          }
+                        );
+                      }} disabled={addSchedule.isPending}>Save</Button>
                     </div>
                   )}
-                   {schedulesLoading ? (
+                  {schedulesLoading ? (
                     <div className="space-y-2 py-4">
                       {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-muted/50 rounded animate-pulse" />)}
                     </div>
@@ -177,10 +167,10 @@ export default function PaymentsPage() {
                 <CardContent>
                   {showEntryForm && (
                     <div className="grid grid-cols-5 gap-2 mb-4 p-3 bg-muted/50 rounded-lg items-end">
-                       <div><label className="text-xs">Amount *</label><Input type="number" value={entryForm.amount} onChange={(e) => setEntryForm(p => ({ ...p, amount: e.target.value }))} placeholder="0.00" /></div>
+                      <div><label className="text-xs">Amount *</label><Input type="number" value={entryForm.amount} onChange={(e) => setEntryForm(p => ({ ...p, amount: e.target.value }))} placeholder="0.00" /></div>
                       <div>
                         <label className="text-xs">Method</label>
-                  <Select value={entryForm.method} onValueChange={(v) => setEntryForm(p => ({ ...p, method: v || "CASH" }))}>
+                        <Select value={entryForm.method} onValueChange={(v) => setEntryForm(p => ({ ...p, method: v || "CASH" }))}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {Object.entries(METHOD_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
@@ -189,10 +179,29 @@ export default function PaymentsPage() {
                       </div>
                       <div><label className="text-xs">Reference</label><Input value={entryForm.reference} onChange={(e) => setEntryForm(p => ({ ...p, reference: e.target.value }))} /></div>
                       <div><label className="text-xs">Date *</label><Input type="date" value={entryForm.paymentDate} onChange={(e) => setEntryForm(p => ({ ...p, paymentDate: e.target.value }))} /></div>
-                      <Button size="sm" onClick={() => { if (!entryForm.amount || !entryForm.paymentDate) { showToast("Amount and date are required", "error"); return; } addEntry.mutate(); }} disabled={addEntry.isPending}>Save</Button>
+                      <Button size="sm" onClick={() => {
+                        if (!entryForm.amount || !entryForm.paymentDate) { showToast("Amount and date are required", "error"); return; }
+                        addEntry.mutate(
+                          {
+                            amount: parseFloat(entryForm.amount),
+                            method: entryForm.method,
+                            reference: entryForm.reference || undefined,
+                            paymentDate: entryForm.paymentDate,
+                            notes: entryForm.notes || undefined,
+                          },
+                          {
+                            onSuccess: () => {
+                              setShowEntryForm(false);
+                              setEntryForm({ amount: "", method: "CASH", reference: "", paymentDate: "", notes: "" });
+                              showToast("Payment recorded");
+                            },
+                            onError: (err) => showToast(getApiErrorMessage(err, "Failed to record payment"), "error"),
+                          }
+                        );
+                      }} disabled={addEntry.isPending}>Save</Button>
                     </div>
                   )}
-                   {entriesLoading ? (
+                  {entriesLoading ? (
                     <div className="space-y-2 py-4">
                       {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-muted/50 rounded animate-pulse" />)}
                     </div>

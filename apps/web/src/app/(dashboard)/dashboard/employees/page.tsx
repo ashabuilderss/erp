@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useInviteEmployee, useCreateEmployeeWithUser, useRevokeEmployeeAccess } from "@/hooks/api";
+import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useInviteEmployee, useCreateEmployeeWithUser, useRevokeEmployeeAccess, useCurrentUser } from "@/hooks/api";
 import type { CreateEmployeeWithUserDto } from "@/hooks/api";
 import { useDepartments } from "@/hooks/api";
 import { useDesignations } from "@/hooks/api";
@@ -44,6 +44,7 @@ export default function EmployeesPage() {
   const { data: deptData } = useDepartments({ limit: 50 });
   const { data: desigData } = useDesignations({ limit: 50 });
   const { showToast } = useToast();
+  const { data: currentUser } = useCurrentUser();
   const createMutation = useCreateEmployee();
   const updateMutation = useUpdateEmployee();
   const deleteMutation = useDeleteEmployee();
@@ -52,6 +53,7 @@ export default function EmployeesPage() {
   const revokeAccessMutation = useRevokeEmployeeAccess();
 
   const departments = deptData?.data || [];
+  const canManageEmployees = ["OWNER", "ADMIN", "HR_MANAGER"].includes(currentUser?.user?.role || "");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createWithUserOpen, setCreateWithUserOpen] = useState(false);
@@ -76,16 +78,18 @@ export default function EmployeesPage() {
     { accessorKey: "phone", header: "Phone", cell: ({ row }) => <span>{row.original.phone || "-"}</span> },
     { id: "actions", header: "", cell: ({ row }) => (
       <div className="flex items-center gap-1">
-        {!row.original.userId && (
-          <>
-            <Button variant="ghost" size="icon-sm" onClick={() => { setInviteItem(row.original); setInviteEmail(""); }} title="Send invite"><Mail className="h-4 w-4" /></Button>
-          </>
+        {canManageEmployees && !row.original.userId && (
+          <Button variant="ghost" size="icon-sm" onClick={() => { setInviteItem(row.original); setInviteEmail(""); }} title="Send invite"><Mail className="h-4 w-4" /></Button>
         )}
-        <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ employeeCode: row.original.employeeCode, departmentId: row.original.departmentId, designationId: row.original.designationId, status: row.original.status, phone: row.original.phone ?? undefined, dateOfJoining: row.original.dateOfJoining ?? undefined, salary: row.original.salary ?? undefined, address: row.original.address ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
-        {row.original.status === "ACTIVE" && (
+        {canManageEmployees && (
+          <Button variant="ghost" size="icon-sm" onClick={() => { setEditItem(row.original); setForm({ employeeCode: row.original.employeeCode, departmentId: row.original.departmentId, designationId: row.original.designationId, status: row.original.status, phone: row.original.phone ?? undefined, dateOfJoining: row.original.dateOfJoining ?? undefined, salary: row.original.salary ?? undefined, address: row.original.address ?? undefined }); }}><Pencil className="h-4 w-4" /></Button>
+        )}
+        {canManageEmployees && row.original.status === "ACTIVE" && (
           <Button variant="ghost" size="icon-sm" onClick={() => setConfirmAction({ type: "terminate", employeeId: row.original.id })} title="Terminate"><Ban className="h-4 w-4 text-destructive" /></Button>
         )}
-        <Button variant="ghost" size="icon-sm" onClick={() => setConfirmAction({ type: "delete", employeeId: row.original.id })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        {canManageEmployees && (
+          <Button variant="ghost" size="icon-sm" onClick={() => setConfirmAction({ type: "delete", employeeId: row.original.id })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        )}
       </div>
     )},
   ];
@@ -95,6 +99,8 @@ export default function EmployeesPage() {
       <div className="flex items-center justify-between">
         <div><h2 className="text-2xl font-semibold">Employees</h2><p className="text-sm text-muted-foreground">Manage your workforce</p></div>
         <div className="flex items-center gap-2">
+          {canManageEmployees && (
+          <>
           <Dialog open={createWithUserOpen} onOpenChange={(o) => { setCreateWithUserOpen(o); if (!o) resetUserForm(); }}>
             <DialogTrigger render={<Button variant="outline" />}><UserPlus className="h-4 w-4" /> Create with Login</DialogTrigger>
             <DialogContent className="sm:max-w-lg">
@@ -129,6 +135,8 @@ export default function EmployeesPage() {
               <DialogFooter><Button onClick={() => { const rules: ValidationRules<EmployeeForm> = { departmentId: { required: "Department is required" }, designationId: { required: "Designation is required" } }; const fieldErrors = validateForm(form, rules); setErrors(fieldErrors); if (Object.keys(fieldErrors).length > 0) return; const dto: CreateEmployeeDto = { employeeCode: form.employeeCode || undefined, departmentId: form.departmentId!, designationId: form.designationId!, phone: form.phone || undefined, status: form.status, salary: form.salary || undefined, address: form.address || undefined, dateOfJoining: form.dateOfJoining || undefined }; createMutation.mutate(dto, { onSuccess: () => { showToast("Employee created"); setCreateOpen(false); resetForm(); setErrors({}); }, onError: (err) => showToast(getApiErrorMessage(err, "Failed to create employee"), "error") }); }} disabled={createMutation.isPending}>Save</Button></DialogFooter>
             </DialogContent>
           </Dialog>
+          </>
+          )}
         </div>
       </div>
 

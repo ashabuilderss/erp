@@ -17,14 +17,16 @@ import { RequirePermissions } from '../../../common/decorators/permissions.decor
 import { Permissions } from '../../../common/auth/permissions';
 import { CurrentCompany } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { UseIdempotency } from '../../../common/decorators/idempotency.decorator';
 
 @Controller('designations')
 export class DesignationsController {
   constructor(private readonly designationsService: DesignationsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
-  @RequirePermissions(Permissions.DEPARTMENT_CREATE)
+  @UseIdempotency()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DESIGNATION_CREATE)
   async create(
     @Body() dto: CreateDesignationDto,
     @CurrentCompany('id') companyId: string,
@@ -33,8 +35,8 @@ export class DesignationsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
-  @RequirePermissions(Permissions.DEPARTMENT_READ)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DESIGNATION_READ)
   async findAll(
     @Query() query: QueryDesignationDto,
     @CurrentCompany('id') companyId: string,
@@ -43,8 +45,8 @@ export class DesignationsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
-  @RequirePermissions(Permissions.DEPARTMENT_READ)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DESIGNATION_READ)
   async findOne(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,
@@ -53,8 +55,8 @@ export class DesignationsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.HR_MANAGER)
-  @RequirePermissions(Permissions.DEPARTMENT_UPDATE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.MANAGER)
+  @RequirePermissions(Permissions.DESIGNATION_UPDATE)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateDesignationDto,
@@ -64,8 +66,8 @@ export class DesignationsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
-  @RequirePermissions(Permissions.DEPARTMENT_DELETE)
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @RequirePermissions(Permissions.DESIGNATION_DELETE)
   async remove(
     @Param('id') id: string,
     @CurrentCompany('id') companyId: string,

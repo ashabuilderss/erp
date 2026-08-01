@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-XSS-Protection", value: "1; mode=block" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(self)" },
           {
             key: "Content-Security-Policy",
             value: [
@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' http://localhost:4000 https:",
+              `connect-src 'self' ${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"} https: ws: wss:`,
               "frame-ancestors 'none'",
               "object-src 'none'",
             ].join("; "),

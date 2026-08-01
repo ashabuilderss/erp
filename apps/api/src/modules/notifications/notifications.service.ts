@@ -6,7 +6,8 @@ import { CreateNotificationDto } from './dto/create-notification.dto';
 import { NotificationEvents } from './events/notification-events';
 import { Prisma } from '@prisma/client';
 import { safeSortBy } from '../../common/utils/sort-by';
-import { Subject } from 'rxjs';
+import { RealtimeGateway } from '../../common/realtime/realtime.gateway';
+import { NotificationDeliveryService } from './channels/delivery.service';
 
 const ALLOWED_SORT = [
   'createdAt',
@@ -18,11 +19,11 @@ const ALLOWED_SORT = [
 
 @Injectable()
 export class NotificationsService {
-  private sseSubjects = new Map<string, Subject<unknown>>();
-
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private deliveryService: NotificationDeliveryService,
+    private realtimeGateway: RealtimeGateway,
   ) {}
 
   private typeToPrefKey: Record<string, string> = {
@@ -68,6 +69,22 @@ export class NotificationsService {
       NotificationEvents.NotificationCreated,
       notification,
     );
+
+    // Wire up FCM and Email delivery
+    this.deliveryService
+      .deliver({
+        userId: dto.userId,
+        companyId: dto.companyId,
+        title: dto.title,
+        message: dto.message,
+        type,
+        link: dto.link,
+      })
+      .catch((err) => {
+        // Don't fail the transaction if delivery fails, just log it.
+        console.error('Failed to deliver notification', err);
+      });
+
     return notification;
   }
 
@@ -76,6 +93,7 @@ export class NotificationsService {
       page = 1,
       limit = 20,
       read,
+      acknowledged,
       type,
       sortBy = 'createdAt',
       sortOrder = 'desc',
@@ -84,6 +102,9 @@ export class NotificationsService {
     const where: Prisma.NotificationWhereInput = { userId };
 
     if (read !== undefined) where.read = read === 'true';
+    if (acknowledged !== undefined) {
+      where.acknowledgedAt = acknowledged === 'true' ? { not: null } : null;
+    }
     if (type) where.type = type;
 
     const [data, total] = await Promise.all([
@@ -108,6 +129,25 @@ export class NotificationsService {
     });
   }
 
+  async getUnacknowledgedCount(userId: string) {
+    return this.prisma.notification.count({
+      where: { userId, acknowledgedAt: null },
+    });
+  }
+
+  async acknowledge(id: string, userId: string) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, userId },
+    });
+    if (!notification) {
+      throw new NotFoundException(`Notification with ID ${id} not found`);
+    }
+    return this.prisma.notification.update({
+      where: { id },
+      data: { read: true, acknowledgedAt: new Date() },
+    });
+  }
+
   async markAsRead(id: string, userId: string) {
     const notification = await this.prisma.notification.findFirst({
       where: { id, userId },
@@ -129,16 +169,7 @@ export class NotificationsService {
     return { success: true };
   }
 
-  subscribe(userId: string): Subject<unknown> {
-    if (!this.sseSubjects.has(userId)) {
-      this.sseSubjects.set(userId, new Subject<unknown>());
-    }
-    return this.sseSubjects.get(userId)!;
-  }
-
   pushToUser(userId: string, data: unknown) {
-    if (this.sseSubjects.has(userId)) {
-      this.sseSubjects.get(userId)!.next(data);
-    }
+    this.realtimeGateway.broadcastToUser(userId, 'notification', data);
   }
 }

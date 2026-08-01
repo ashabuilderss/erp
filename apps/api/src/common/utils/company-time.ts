@@ -7,7 +7,9 @@ export function getCompanyTz(settings: Record<string, unknown> | null): string {
 export function getTodayInTz(tz: string): Date {
   const now = new Date();
   const tzNow = new Date(now.toLocaleString('en-US', { timeZone: tz }));
-  return new Date(Date.UTC(tzNow.getFullYear(), tzNow.getMonth(), tzNow.getDate()));
+  return new Date(
+    Date.UTC(tzNow.getFullYear(), tzNow.getMonth(), tzNow.getDate()),
+  );
 }
 
 export function getNowInTz(tz: string): Date {

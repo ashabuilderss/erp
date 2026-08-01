@@ -32,7 +32,8 @@ export class NotificationDeliveryService {
     });
     if (!user) return;
 
-    const prefs = (user.notificationPreferences as Record<string, boolean>) ?? {};
+    const prefs =
+      (user.notificationPreferences as Record<string, boolean>) ?? {};
 
     const prefKey = this.typeToPrefKey(payload.type);
     if (prefKey && prefs[prefKey] === false) {
@@ -49,16 +50,18 @@ export class NotificationDeliveryService {
     }
 
     if (prefKey && prefs[`${prefKey}_push`] !== false) {
-      const deviceRegistrations = await this.prisma.deviceRegistration.findMany({
-        where: { employee: { user: { id: payload.userId } } },
-        select: { id: true, fcmToken: true },
-      });
+      const deviceRegistrations = await this.prisma.deviceRegistration.findMany(
+        {
+          where: { employees: { users: { id: payload.userId } } },
+          select: { id: true, fcmtoken: true },
+        },
+      );
       for (const device of deviceRegistrations) {
-        if (device.fcmToken) {
+        if (device.fcmtoken) {
           const data: Record<string, string> = { type: payload.type };
           if (payload.link) data.link = payload.link;
           this.pushService.send({
-            token: device.fcmToken,
+            token: device.fcmtoken,
             title: payload.title,
             body: payload.message,
             data,
@@ -66,8 +69,6 @@ export class NotificationDeliveryService {
         }
       }
     }
-
-    this.eventEmitter.emit('notification.created', payload);
   }
 
   private typeToPrefKey(type: string): string | undefined {

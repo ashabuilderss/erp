@@ -13,7 +13,9 @@ export class EscalationEventsService {
       },
       orderBy: { triggeredAt: 'desc' },
       include: {
-        rule: { select: { name: true, triggerType: true, level: true } },
+        escalationRules: {
+          select: { name: true, triggerType: true, level: true },
+        },
       },
     });
   }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../config/prisma.service';
-import { Prisma } from '@prisma/client';
+import { DayAggregateStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class AnalyticsService {
@@ -69,7 +69,7 @@ export class AnalyticsService {
         where: { companyId },
         take: 5,
         orderBy: { score: 'desc' },
-        include: { employee: { include: { user: true } } },
+        include: { employees: { include: { users: true } } },
       }),
       this.getAttendanceRate(companyId),
       this.prisma.leaveRequest.count({
@@ -126,7 +126,7 @@ export class AnalyticsService {
   async getEmployeeAnalytics(employeeId: string, companyId: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { id: employeeId, companyId },
-      include: { user: true, department: true, designation: true },
+      include: { users: true, departments: true, designations: true },
     });
     if (!employee) throw new Error('Employee not found');
 
@@ -145,7 +145,7 @@ export class AnalyticsService {
         where: { employeeId },
         orderBy: [{ year: 'desc' }, { quarter: 'desc' }],
       }),
-      this.prisma.attendance.findMany({
+      this.prisma.attendanceDayAggregate.findMany({
         where: { employeeId },
         orderBy: { date: 'desc' },
       }),
@@ -166,7 +166,9 @@ export class AnalyticsService {
     ]);
 
     const totalDays = attendance.length;
-    const presentDays = attendance.filter((a) => a.status === 'PRESENT').length;
+    const presentDays = attendance.filter(
+      (a) => a.status === DayAggregateStatus.COMPLETED,
+    ).length;
     const attendanceRate =
       totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
 
@@ -198,7 +200,7 @@ export class AnalyticsService {
 
     const employees = await this.prisma.employee.findMany({
       where,
-      include: { user: true, department: true },
+      include: { users: true, departments: true },
     });
 
     const employeeIds = employees.map((e) => e.id);
@@ -210,7 +212,7 @@ export class AnalyticsService {
       this.prisma.performance.findMany({
         where: { employeeId: { in: employeeIds } },
       }),
-      this.prisma.attendance.findMany({
+      this.prisma.attendanceDayAggregate.findMany({
         where: { employeeId: { in: employeeIds } },
       }),
       this.prisma.leaveRequest.findMany({
@@ -238,10 +240,10 @@ export class AnalyticsService {
       pendingLeaves: leaves.length,
       employees: employees.map((e) => ({
         id: e.id,
-        name: e.user
-          ? `${e.user.firstName} ${e.user.lastName}`
+        name: e.users
+          ? `${e.users.firstName} ${e.users.lastName}`
           : 'Unlinked User',
-        department: e.department?.name,
+        departments: e.departments?.name,
         assignments: assignments.filter((a) => a.employeeId === e.id).length,
         avgScore: this.getEmployeeAvgScore(performance, e.id),
       })),
@@ -275,8 +277,10 @@ export class AnalyticsService {
 
   private async getAttendanceRate(companyId: string) {
     const [total, present] = await Promise.all([
-      this.prisma.attendance.count({ where: { companyId } }),
-      this.prisma.attendance.count({ where: { status: 'PRESENT', companyId } }),
+      this.prisma.attendanceDayAggregate.count({ where: { companyId } }),
+      this.prisma.attendanceDayAggregate.count({
+        where: { status: DayAggregateStatus.COMPLETED, companyId },
+      }),
     ]);
     return total > 0 ? Math.round((present / total) * 100) : 0;
   }
@@ -302,7 +306,7 @@ export class AnalyticsService {
   async getBookingsByEmployee(companyId: string) {
     const employees = await this.prisma.employee.findMany({
       where: { companyId, status: 'ACTIVE' },
-      include: { user: true },
+      include: { users: true },
     });
 
     const employeeIds = employees.map((e) => e.id);
@@ -314,13 +318,17 @@ export class AnalyticsService {
 
     return employees
       .map((e) => {
-        const empBookings = bookings.filter((b) => b.assignedToEmployeeId === e.id);
+        const empBookings = bookings.filter(
+          (b) => b.assignedToEmployeeId === e.id,
+        );
         const total = empBookings.reduce((sum, b) => sum + b._count.id, 0);
         const closed = empBookings
           .filter((b) => b.status === 'CONFIRMED')
           .reduce((sum, b) => sum + b._count.id, 0);
         return {
-          name: e.user ? `${e.user.firstName} ${e.user.lastName}` : 'Unlinked',
+          name: e.users
+            ? `${e.users.firstName} ${e.users.lastName}`
+            : 'Unlinked',
           bookings: total,
           closed,
         };
@@ -333,7 +341,7 @@ export class AnalyticsService {
   async getSiteVisitsByEmployee(companyId: string) {
     const employees = await this.prisma.employee.findMany({
       where: { companyId, status: 'ACTIVE' },
-      include: { user: true },
+      include: { users: true },
     });
 
     const employeeIds = employees.map((e) => e.id);
@@ -345,7 +353,9 @@ export class AnalyticsService {
 
     return employees
       .map((e) => {
-        const empVisits = siteVisits.filter((sv) => sv.assignedToEmployeeId === e.id);
+        const empVisits = siteVisits.filter(
+          (sv) => sv.assignedToEmployeeId === e.id,
+        );
         const scheduled = empVisits
           .filter((sv) => sv.status === 'SCHEDULED')
           .reduce((sum, sv) => sum + sv._count.id, 0);
@@ -353,13 +363,15 @@ export class AnalyticsService {
           .filter((sv) => sv.status === 'COMPLETED')
           .reduce((sum, sv) => sum + sv._count.id, 0);
         return {
-          name: e.user ? `${e.user.firstName} ${e.user.lastName}` : 'Unlinked',
+          name: e.users
+            ? `${e.users.firstName} ${e.users.lastName}`
+            : 'Unlinked',
           scheduled,
           completed,
         };
       })
       .filter((e) => e.scheduled > 0 || e.completed > 0)
-      .sort((a, b) => (b.scheduled + b.completed) - (a.scheduled + a.completed))
+      .sort((a, b) => b.scheduled + b.completed - (a.scheduled + a.completed))
       .slice(0, 10);
   }
 
@@ -369,7 +381,7 @@ export class AnalyticsService {
     thirtyDaysAgo.setHours(0, 0, 0, 0);
 
     const [records, leaves] = await Promise.all([
-      this.prisma.attendance.findMany({
+      this.prisma.attendanceDayAggregate.findMany({
         where: { companyId, date: { gte: thirtyDaysAgo } },
         select: { date: true, status: true },
         orderBy: { date: 'asc' },
@@ -399,8 +411,8 @@ export class AnalyticsService {
       const key = r.date.toISOString().slice(0, 10);
       const entry = dayMap.get(key);
       if (!entry) continue;
-      if (r.status === 'PRESENT') entry.present++;
-      else if (r.status === 'ABSENT') entry.absent++;
+      if (r.status === DayAggregateStatus.COMPLETED) entry.present++;
+      else if (r.status === DayAggregateStatus.UNDER_REVIEW) entry.absent++;
     }
 
     for (const leave of leaves) {

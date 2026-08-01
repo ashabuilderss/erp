@@ -89,7 +89,7 @@ export default function MaterialsPage() {
             <p className="text-sm text-muted-foreground">Manage material master data</p>
           </div>
           {canWrite && (
-            <Dialog open={matDialog === "create"} onOpenChange={(o) => { if (!o) setMatDialog(null); }}>
+            <Dialog open={matDialog === "create"} onOpenChange={(o) => { setMatDialog(o ? "create" : null); }}>
               <DialogTrigger render={<Button />}><Plus className="h-4 w-4" /> Add Material</DialogTrigger>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader><DialogTitle>Add Material</DialogTitle></DialogHeader>

@@ -19,7 +19,7 @@ export class TaskOverdueJob {
         type: { in: ['PROPERTY', 'LEAD', 'SITE_VISIT', 'BOOKING'] },
       },
       include: {
-        employee: { include: { user: true } },
+        employees: { include: { users: true } },
       },
     });
 
@@ -28,10 +28,12 @@ export class TaskOverdueJob {
       return;
     }
 
-    this.logger.log(`Found ${overdue.length} overdue tasks — creating notifications`);
+    this.logger.log(
+      `Found ${overdue.length} overdue tasks — creating notifications`,
+    );
 
     for (const assignment of overdue) {
-      const user = assignment.employee?.user;
+      const user = assignment.employees?.users;
       if (!user) continue;
 
       const existingNotification = await this.prisma.notification.findFirst({
@@ -56,6 +58,8 @@ export class TaskOverdueJob {
       });
     }
 
-    this.logger.log(`Created notifications for ${overdue.length} overdue tasks`);
+    this.logger.log(
+      `Created notifications for ${overdue.length} overdue tasks`,
+    );
   }
 }

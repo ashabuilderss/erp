@@ -7,6 +7,7 @@ import { LeaveRequestsModule } from './leave-requests/leave-requests.module';
 import { LeaveAllocationsModule } from './leave-allocations/leave-allocations.module';
 import { DeviceRegistrationsModule } from './device-registrations/device-registrations.module';
 import { AttendanceCorrectionsModule } from './attendance-corrections/attendance-corrections.module';
+import { EvidenceReviewModule } from './attendance-evidence-review/evidence-review.module';
 import { PayrollModule } from './payroll/payroll.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { PayrollModule } from './payroll/payroll.module';
     LeaveAllocationsModule,
     DeviceRegistrationsModule,
     AttendanceCorrectionsModule,
+    EvidenceReviewModule,
     PayrollModule,
   ],
 })

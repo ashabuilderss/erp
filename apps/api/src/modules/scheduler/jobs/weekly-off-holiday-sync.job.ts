@@ -22,7 +22,15 @@ export class WeeklyOffHolidaySyncJob {
     for (const company of companies) {
       const settings = (company.settings as Record<string, unknown>) ?? {};
       const weeklyOffDays = (settings.weeklyOffDays as string[]) ?? ['SUNDAY'];
-      const dayName = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][today.getDay()];
+      const dayName = [
+        'SUNDAY',
+        'MONDAY',
+        'TUESDAY',
+        'WEDNESDAY',
+        'THURSDAY',
+        'FRIDAY',
+        'SATURDAY',
+      ][today.getDay()];
 
       if (weeklyOffDays.includes(dayName)) {
         const employees = await this.prisma.employee.findMany({
@@ -31,22 +39,29 @@ export class WeeklyOffHolidaySyncJob {
         });
 
         for (const emp of employees) {
-          await this.prisma.attendance.upsert({
+          await this.prisma.attendanceDayAggregate.upsert({
             where: {
-              companyId_employeeId_date: { companyId: company.id, employeeId: emp.id, date: today },
+              companyId_employeeId_date: {
+                companyId: company.id,
+                employeeId: emp.id,
+                date: today,
+              },
             },
             create: {
               employeeId: emp.id,
               companyId: company.id,
               date: today,
-              status: 'PRESENT',
-              checkIn: new Date(today.getTime() + 10 * 60 * 60 * 1000),
-              checkOut: new Date(today.getTime() + 19 * 60 * 60 * 1000),
+              status: 'COMPLETED',
+              totalWorkMinutes: 540,
+              firstPunchAt: new Date(today.getTime() + 10 * 60 * 60 * 1000),
+              lastPunchAt: new Date(today.getTime() + 19 * 60 * 60 * 1000),
             },
             update: {},
           });
         }
-        this.logger.log(`Weekly off (${dayName}) synced for ${employees.length} employees in ${company.id}`);
+        this.logger.log(
+          `Weekly off (${dayName}) synced for ${employees.length} employees in ${company.id}`,
+        );
       }
     }
   }

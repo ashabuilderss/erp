@@ -22,7 +22,7 @@ export class LeaveAllocationsService {
   async create(dto: CreateLeaveAllocationDto, companyId: string) {
     return this.prisma.leaveAllocation.create({
       data: { ...dto, companyId },
-      include: { employee: { include: { user: true } } },
+      include: { employees: { include: { users: true } } },
     });
   }
 
@@ -46,16 +46,18 @@ export class LeaveAllocationsService {
     if (search) {
       where.OR = [
         {
-          employee: { employeeCode: { contains: search, mode: 'insensitive' } },
-        },
-        {
-          employee: {
-            user: { firstName: { contains: search, mode: 'insensitive' } },
+          employees: {
+            employeeCode: { contains: search, mode: 'insensitive' },
           },
         },
         {
-          employee: {
-            user: { lastName: { contains: search, mode: 'insensitive' } },
+          employees: {
+            users: { firstName: { contains: search, mode: 'insensitive' } },
+          },
+        },
+        {
+          employees: {
+            users: { lastName: { contains: search, mode: 'insensitive' } },
           },
         },
       ];
@@ -68,7 +70,7 @@ export class LeaveAllocationsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          employee: { include: { user: true, department: true } },
+          employees: { include: { users: true, departments: true } },
         },
       }),
       this.prisma.leaveAllocation.count({ where }),
@@ -105,7 +107,7 @@ export class LeaveAllocationsService {
   async findOne(id: string, companyId: string) {
     const record = await this.prisma.leaveAllocation.findFirst({
       where: { id, companyId },
-      include: { employee: { include: { user: true, department: true } } },
+      include: { employees: { include: { users: true, departments: true } } },
     });
     if (!record) throw new NotFoundException('Leave allocation not found');
     return record;
@@ -116,12 +118,12 @@ export class LeaveAllocationsService {
     return this.prisma.leaveAllocation.update({
       where: { id },
       data: dto,
-      include: { employee: { include: { user: true } } },
+      include: { employees: { include: { users: true } } },
     });
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    return this.prisma.leaveAllocation.delete({ where: { id } });
+    return this.prisma.leaveAllocation.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }

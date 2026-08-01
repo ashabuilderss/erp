@@ -63,9 +63,8 @@ function EmployeeCorrectionsView() {
                 <Select value={form.requestedStatus || undefined} onValueChange={(v) => setForm({ ...form, requestedStatus: v ?? "" })}>
                   <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PRESENT">Present</SelectItem>
-                    <SelectItem value="ABSENT">Absent</SelectItem>
-                    <SelectItem value="HALF_DAY">Half Day</SelectItem>
+                    <SelectItem value="COMPLETED">Completed</SelectItem>
+                    <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -172,15 +171,18 @@ function AdminCorrectionsView() {
                       <td className="py-2"><Badge variant="outline" className={statusColors[c.status]}>{c.status}</Badge></td>
                       <td className="py-2">
                         {c.status === "PENDING" && (
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon-sm" onClick={() => approveMutation.mutate({ id: c.id, notes }, {
-                              onSuccess: () => showToast("Correction approved"),
-                              onError: (err: Error) => showToast(err.message || "Failed", "error"),
-                            })}><CheckCircle2 className="h-4 w-4 text-green-600" /></Button>
-                            <Button variant="ghost" size="icon-sm" onClick={() => rejectMutation.mutate({ id: c.id, notes }, {
-                              onSuccess: () => showToast("Correction rejected"),
-                              onError: (err: Error) => showToast(err.message || "Failed", "error"),
-                            })}><XCircle className="h-4 w-4 text-red-600" /></Button>
+                          <div className="space-y-2">
+                            <Textarea placeholder="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                            <div className="flex items-center gap-2">
+                              <Button variant="ghost" size="icon-sm" onClick={() => approveMutation.mutate({ id: c.id, notes }, {
+                                onSuccess: () => showToast("Correction approved"),
+                                onError: (err: Error) => showToast(err.message || "Failed", "error"),
+                              })}><CheckCircle2 className="h-4 w-4 text-green-600" /></Button>
+                              <Button variant="ghost" size="icon-sm" onClick={() => rejectMutation.mutate({ id: c.id, notes }, {
+                                onSuccess: () => showToast("Correction rejected"),
+                                onError: (err: Error) => showToast(err.message || "Failed", "error"),
+                              })}><XCircle className="h-4 w-4 text-red-600" /></Button>
+                            </div>
                           </div>
                         )}
                         {c.status !== "PENDING" && c.notes && (
