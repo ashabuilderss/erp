@@ -277,7 +277,7 @@ export class LeadsService {
           title: 'New Lead Assigned',
           message: `Lead "${updated.customerName}" has been assigned to you`,
           type: 'LEAD_ASSIGNED',
-          link: `/leads/${id}`,
+          link: `/dashboard/leads/${id}`,
         });
       }
     }
@@ -419,7 +419,7 @@ export class LeadsService {
         title: 'Lead Converted',
         message: `Lead "${result.lead.customerName}" has been converted to a customer`,
         type: 'LEAD_CONVERTED',
-        link: `/leads/${id}`,
+        link: `/dashboard/leads/${id}`,
       });
     }
 

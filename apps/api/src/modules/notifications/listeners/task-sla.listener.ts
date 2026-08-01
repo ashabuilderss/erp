@@ -21,7 +21,7 @@ export class TaskSlaListener {
       title: 'Task Deadline Approaching',
       message: `Task SLA deadline is in 30 minutes.`,
       type: 'TASK_SLA_REMINDER',
-      link: `/dashboard/tasks/${event.entityId}`,
+      link: `/dashboard/my-tasks/${event.entityId}`,
     });
   }
 
@@ -37,7 +37,7 @@ export class TaskSlaListener {
       title: 'Task SLA Breached',
       message: `You missed the time limit for task ${event.entityId}.`,
       type: 'TASK_SLA_BREACHED_ASSIGNEE',
-      link: `/dashboard/tasks/${event.entityId}`,
+      link: `/dashboard/my-tasks/${event.entityId}`,
     });
 
     // Notify Creator if they are not the assignee
@@ -48,7 +48,7 @@ export class TaskSlaListener {
         title: 'Task SLA Breached (Assignee)',
         message: `Task ${event.entityId} was not completed within the SLA time limit.`,
         type: 'TASK_SLA_BREACHED_CREATOR',
-        link: `/dashboard/tasks/${event.entityId}`,
+        link: `/dashboard/my-tasks/${event.entityId}`,
       });
     }
   }

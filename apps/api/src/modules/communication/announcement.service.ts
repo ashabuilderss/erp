@@ -316,7 +316,7 @@ export class AnnouncementService {
           title: announcement.title,
           message: announcement.body.substring(0, 200),
           type: 'ANNOUNCEMENT',
-          link: `/announcements/${announcement.id}`,
+          link: `/dashboard/announcements/${announcement.id}`,
         });
       }
     }

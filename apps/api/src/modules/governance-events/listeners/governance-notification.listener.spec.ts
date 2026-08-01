@@ -85,7 +85,7 @@ describe('GovernanceNotificationListener', () => {
           userId: 'user-creator-1',
           title: 'Task completed',
           type: 'TASK',
-          link: '/dashboard/tasks/task-1',
+          link: '/dashboard/my-tasks/task-1',
           message: expect.stringContaining('Ship inventory'),
         }),
       );

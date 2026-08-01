@@ -56,7 +56,7 @@ export class GovernanceNotificationListener {
           title: 'Task completed',
           message: `Task "${task.title}" has been marked as completed.`,
           type: 'TASK',
-          link: `/dashboard/tasks/${taskId}`,
+          link: `/dashboard/my-tasks/${taskId}`,
         });
       },
     );

@@ -65,7 +65,7 @@ export class TaskEscalationNotificationListener {
           title: 'Task Escalated to You',
           message: `Task "${task.title}" has been escalated to you for review (SLA breach).`,
           type: 'WARNING',
-          link: `/dashboard/tasks/${task.id}`,
+          link: `/dashboard/my-tasks/${task.id}`,
         });
       },
     );
@@ -112,7 +112,7 @@ export class TaskEscalationNotificationListener {
             title: 'Task Escalated to HR',
             message: `Task "${task.title}" has been escalated to HR (critical SLA breach).`,
             type: 'ERROR',
-            link: `/dashboard/tasks/${task.id}`,
+            link: `/dashboard/my-tasks/${task.id}`,
           });
         }
 
@@ -182,7 +182,7 @@ export class TaskEscalationNotificationListener {
             title: 'Task Proof Escalated to HR',
             message: `A task proof submission has been escalated to HR for review.`,
             type: 'WARNING',
-            link: `/dashboard/tasks/${proof.taskId}`,
+            link: `/dashboard/my-tasks/${proof.taskId}`,
           });
         }
       },
@@ -233,7 +233,7 @@ export class TaskEscalationNotificationListener {
           title: 'Extension Requested',
           message: `An extension has been requested for task "${task.title}".`,
           type: 'INFO',
-          link: `/dashboard/tasks/${task.id}`,
+          link: `/dashboard/my-tasks/${task.id}`,
         });
       },
     );
