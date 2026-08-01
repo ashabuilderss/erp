@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useTask, useAcknowledgeTask, useSubmitTaskProof, useReviewProof } from '@/hooks/api/useTasks';
+import { useTask, useAcknowledgeTask, useSubmitTaskProof, useAcknowledgeCompletion, useApproveCompletion, useRejectCompletion } from '@/hooks/api/useTasks';
 import { useCurrentUser } from '@/hooks/api/useCurrentUser';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,9 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const { data: task, isLoading } = useTask(id);
   const { mutateAsync: acknowledgeTask, isPending: isAckPending } = useAcknowledgeTask();
   const { mutateAsync: submitProof, isPending: isSubmitPending } = useSubmitTaskProof();
-  const { mutateAsync: reviewProof, isPending: isReviewPending } = useReviewProof();
+  const { mutateAsync: acknowledgeCompletion, isPending: isAckCompletionPending } = useAcknowledgeCompletion();
+  const { mutateAsync: approveCompletion, isPending: isApprovePending } = useApproveCompletion();
+  const { mutateAsync: rejectCompletion, isPending: isRejectPending } = useRejectCompletion();
   const { data: currentUser } = useCurrentUser();
 
   const [proofNotes, setProofNotes] = useState('');
@@ -30,7 +32,11 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const [reviewNotes, setReviewNotes] = useState('');
   const [rejectingProofId, setRejectingProofId] = useState<string | null>(null);
 
-  const canReview = currentUser?.user?.role && ['OWNER', 'ADMIN', 'HR_MANAGER'].includes(currentUser.user.role);
+  const role = currentUser?.user?.role;
+  const canAcknowledge = !!role && ['OWNER', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'HR_MANAGER'].includes(role);
+  const canApprove = !!role && ['OWNER', 'ADMIN'].includes(role);
+  const approval = task?.taskCompletionApprovals?.[0];
+  const isAcknowledged = approval?.status === 'MANAGER_ACKNOWLEDGED';
 
   const handleAcknowledge = async () => {
     try {
@@ -56,13 +62,27 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const handleReviewProof = async (proofId: string, action: 'APPROVE' | 'REJECT') => {
+  const handleAcknowledgeCompletion = async (proofId: string) => {
     try {
-      await reviewProof({
-        proofId,
-        action,
-        payload: action === 'REJECT' ? { comments: reviewNotes } : {},
-      });
+      await acknowledgeCompletion({ proofId, payload: {} });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleApproveCompletion = async (proofId: string) => {
+    try {
+      await approveCompletion({ proofId, payload: {} });
+      setRejectingProofId(null);
+      setReviewNotes('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRejectCompletion = async (proofId: string) => {
+    try {
+      await rejectCompletion({ proofId, payload: { comments: reviewNotes } });
       setReviewNotes('');
       setRejectingProofId(null);
     } catch (err) {
@@ -200,7 +220,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                         <strong>Reviewer Notes:</strong> {proof.reviewerComments}
                       </div>
                     )}
-                    {canReview && proof.status === 'PENDING' && task.status === 'PENDING_VALIDATION' && (
+                    {proof.status === 'PENDING' && task.status === 'PENDING_VALIDATION' && (
                       <div className="mt-4 pt-3 border-t space-y-3">
                         {rejectingProofId === proof.id ? (
                           <div className="space-y-2">
@@ -214,8 +234,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                onClick={() => handleReviewProof(proof.id, 'REJECT')}
-                                disabled={isReviewPending || !reviewNotes}
+                                onClick={() => handleRejectCompletion(proof.id)}
+                                disabled={isRejectPending || !reviewNotes}
                               >
                                 <ThumbsDown className="w-4 h-4 mr-1" /> Confirm Reject
                               </Button>
@@ -229,19 +249,31 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                             </div>
                           </div>
                         ) : (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => handleReviewProof(proof.id, 'APPROVE')}
-                              disabled={isReviewPending}
-                            >
-                              <ThumbsUp className="w-4 h-4 mr-1" /> Approve
-                            </Button>
+                          <div className="flex flex-wrap gap-2">
+                            {canAcknowledge && !isAcknowledged && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleAcknowledgeCompletion(proof.id)}
+                                disabled={isAckCompletionPending}
+                              >
+                                <ThumbsUp className="w-4 h-4 mr-1" /> Acknowledge Completion
+                              </Button>
+                            )}
+                            {canApprove && isAcknowledged && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleApproveCompletion(proof.id)}
+                                disabled={isApprovePending}
+                              >
+                                <CheckCircle2 className="w-4 h-4 mr-1" /> Approve Completion
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="destructive"
                               onClick={() => setRejectingProofId(proof.id)}
-                              disabled={isReviewPending}
+                              disabled={isRejectPending}
                             >
                               <ThumbsDown className="w-4 h-4 mr-1" /> Reject
                             </Button>

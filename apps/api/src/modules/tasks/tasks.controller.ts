@@ -127,20 +127,50 @@ export class TasksController {
     );
   }
 
-  @Post('proofs/:proofId/review/:action')
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR_MANAGER)
-  @RequirePermissions(Permissions.TASK_ESCALATE)
-  async reviewProof(
+  @Post('proofs/:proofId/acknowledge')
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.TASK_COMPLETION_ACKNOWLEDGE)
+  async acknowledgeCompletion(
     @Param('proofId') proofId: string,
-    @Param('action') action: 'APPROVE' | 'REJECT',
     @Request() req: AuthenticatedRequest,
     @Body() dto: ReviewProofDto,
   ) {
-    return await this.proofService.reviewProof(
+    return await this.proofService.acknowledgeCompletion(
       req.user.companyId,
       proofId,
       req.user.id,
-      action,
+      dto,
+    );
+  }
+
+  @Post('proofs/:proofId/approve')
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @RequirePermissions(Permissions.TASK_COMPLETION_APPROVE)
+  async approveCompletion(
+    @Param('proofId') proofId: string,
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: ReviewProofDto,
+  ) {
+    return await this.proofService.approveCompletion(
+      req.user.companyId,
+      proofId,
+      req.user.id,
+      dto,
+    );
+  }
+
+  @Post('proofs/:proofId/reject')
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.TEAM_LEAD, UserRole.HR_MANAGER)
+  @RequirePermissions(Permissions.TASK_COMPLETION_ACKNOWLEDGE)
+  async rejectCompletion(
+    @Param('proofId') proofId: string,
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: ReviewProofDto,
+  ) {
+    return await this.proofService.rejectCompletion(
+      req.user.companyId,
+      proofId,
+      req.user.id,
       dto,
     );
   }

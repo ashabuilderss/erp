@@ -93,6 +93,8 @@ export const Permissions = {
 
   TASK_ASSIGN: 'task:assign',
   TASK_ESCALATE: 'task:escalate',
+  TASK_COMPLETION_ACKNOWLEDGE: 'task:completion:acknowledge',
+  TASK_COMPLETION_APPROVE: 'task:completion:approve',
   APPROVAL_READ: 'approval:read',
   APPROVAL_MANAGE: 'approval:manage',
   PAYROLL_PROCESS: 'payroll:process',
@@ -310,6 +312,8 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     Permissions.RECRUITMENT_CREATE,
     Permissions.RECRUITMENT_UPDATE,
     Permissions.COMPANY_READ,
+    Permissions.TASK_COMPLETION_ACKNOWLEDGE,
+    Permissions.TASK_COMPLETION_APPROVE,
   ],
   ACCOUNTS: [
     Permissions.DASHBOARD_VIEW,
@@ -392,6 +396,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     Permissions.BOOKING_READ,
     Permissions.TASK_ASSIGN,
     Permissions.TASK_ESCALATE,
+    Permissions.TASK_COMPLETION_ACKNOWLEDGE,
     Permissions.WARNING_READ,
     Permissions.WARNING_CREATE,
     Permissions.WARNING_ISSUE,
@@ -415,6 +420,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     Permissions.EOD_READ,
     Permissions.DEVICE_READ,
     Permissions.TASK_ASSIGN,
+    Permissions.TASK_COMPLETION_ACKNOWLEDGE,
     Permissions.WARNING_READ,
     Permissions.APPROVAL_READ,
     Permissions.INVENTORY_READ,

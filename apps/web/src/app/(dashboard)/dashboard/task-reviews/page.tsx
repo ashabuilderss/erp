@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { getApiErrorMessage } from "@/lib/api";
 import { ClipboardCheck, CheckCircle, XCircle, Loader2, ExternalLink } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
-import { useTasks, useReviewProof } from "@/hooks/api";
+import { useTasks, useAcknowledgeCompletion, useApproveCompletion, useRejectCompletion } from "@/hooks/api";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pending",
@@ -34,7 +34,9 @@ export default function TaskReviewsPage() {
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useTasks({ status: "PENDING_VALIDATION", page, limit: 20 });
-  const reviewMutation = useReviewProof();
+  const acknowledgeMutation = useAcknowledgeCompletion();
+  const approveMutation = useApproveCompletion();
+  const rejectMutation = useRejectCompletion();
   const { showToast } = useToast();
 
   const response = data as { items?: any[]; meta?: { total: number; totalPages: number; page: number } } | undefined;
@@ -42,15 +44,40 @@ export default function TaskReviewsPage() {
   const totalPages = response?.meta?.totalPages ?? 1;
   const total = response?.meta?.total ?? 0;
 
-  const handleReview = (proofId: string, action: "APPROVE" | "REJECT") => {
-    reviewMutation.mutate(
-      { proofId, action, payload: { comments: reviewNotes[proofId] || undefined } },
+  const isPending = acknowledgeMutation.isPending || approveMutation.isPending || rejectMutation.isPending;
+
+  const handleAcknowledge = (proofId: string) => {
+    acknowledgeMutation.mutate(
+      { proofId, payload: {} },
+      {
+        onSuccess: () => showToast("Completion acknowledged by manager"),
+        onError: (err: any) => showToast(getApiErrorMessage(err, "Failed to acknowledge"), "error"),
+      },
+    );
+  };
+
+  const handleApprove = (proofId: string) => {
+    approveMutation.mutate(
+      { proofId, payload: { comments: reviewNotes[proofId] || undefined } },
       {
         onSuccess: () => {
-          showToast(`Proof ${action === "APPROVE" ? "approved" : "rejected"}`);
+          showToast("Completion approved");
           setReviewNotes((prev) => { const next = { ...prev }; delete next[proofId]; return next; });
         },
-        onError: (err) => showToast(getApiErrorMessage(err, "Failed to review"), "error"),
+        onError: (err: any) => showToast(getApiErrorMessage(err, "Failed to approve"), "error"),
+      },
+    );
+  };
+
+  const handleReject = (proofId: string) => {
+    rejectMutation.mutate(
+      { proofId, payload: { comments: reviewNotes[proofId] || undefined } },
+      {
+        onSuccess: () => {
+          showToast("Proof rejected");
+          setReviewNotes((prev) => { const next = { ...prev }; delete next[proofId]; return next; });
+        },
+        onError: (err: any) => showToast(getApiErrorMessage(err, "Failed to reject"), "error"),
       },
     );
   };
@@ -79,6 +106,7 @@ export default function TaskReviewsPage() {
         <div className="space-y-3">
           {items.map((task: any) => {
             const pendingProof = task.taskProofs?.find((p: any) => p.status === "PENDING");
+            const isAcknowledged = task.taskCompletionApprovals?.[0]?.status === "MANAGER_ACKNOWLEDGED";
             return (
               <Card key={task.id}>
                 <CardContent className="p-4">
@@ -112,10 +140,16 @@ export default function TaskReviewsPage() {
                               value={reviewNotes[pendingProof.id] || ""}
                               onChange={(e) => setReviewNotes((prev) => ({ ...prev, [pendingProof.id]: e.target.value }))}
                             />
-                            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleReview(pendingProof.id, "APPROVE")} disabled={reviewMutation.isPending}>
-                              <CheckCircle className="h-4 w-4 mr-1" />Approve
-                            </Button>
-                            <Button size="sm" variant="outline" className="text-red-600 border-red-200" onClick={() => handleReview(pendingProof.id, "REJECT")} disabled={reviewMutation.isPending}>
+                            {!isAcknowledged ? (
+                              <Button size="sm" variant="secondary" onClick={() => handleAcknowledge(pendingProof.id)} disabled={isPending}>
+                                <CheckCircle className="h-4 w-4 mr-1" />Acknowledge
+                              </Button>
+                            ) : (
+                              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApprove(pendingProof.id)} disabled={isPending}>
+                                <CheckCircle className="h-4 w-4 mr-1" />Approve
+                              </Button>
+                            )}
+                            <Button size="sm" variant="outline" className="text-red-600 border-red-200" onClick={() => handleReject(pendingProof.id)} disabled={isPending}>
                               <XCircle className="h-4 w-4 mr-1" />Reject
                             </Button>
                           </div>

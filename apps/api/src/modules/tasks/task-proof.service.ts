@@ -2,7 +2,11 @@ import { Injectable, BadRequestException, Logger, Optional } from '@nestjs/commo
 import { PrismaService } from '../../config/prisma.service';
 import { TransitionService } from '../../common/services/transition.service';
 import { SubmitProofDto, ReviewProofDto } from './dto/tasks.dto';
-import { TaskStatus, ApprovalStatus } from '@prisma/client';
+import {
+  TaskStatus,
+  ApprovalStatus,
+  TaskCompletionApprovalStatus,
+} from '@prisma/client';
 import { GovernanceEventPublisher } from '../governance-events/governance-event.publisher';
 import { DomainEventTypes } from '../governance-events/types/events';
 
@@ -74,6 +78,22 @@ export class TaskProofService {
         data: { status: TaskStatus.PENDING_VALIDATION },
       });
 
+      await tx.taskCompletionApproval.upsert({
+        where: { taskId },
+        create: {
+          companyId,
+          taskId,
+          proofId: proof.id,
+          status: TaskCompletionApprovalStatus.PENDING,
+        },
+        update: {
+          proofId: proof.id,
+          status: TaskCompletionApprovalStatus.PENDING,
+          managerAcknowledgedAt: null,
+          ownerApprovedAt: null,
+        },
+      });
+
       const eventStr = isHrRouting
         ? 'PROOF_SUBMITTED_ESCALATED_HR'
         : 'PROOF_SUBMITTED';
@@ -95,11 +115,16 @@ export class TaskProofService {
     });
   }
 
-  async reviewProof(
+  /**
+   * Tier 1 of the two-tier completion sign-off (§7.10).
+   * The assignee's manager (or a manager/HR/owner delegate) confirms the
+   * submitted proof is genuine. The task remains PENDING_VALIDATION until the
+   * Owner performs the distinct "Approve completion" action.
+   */
+  async acknowledgeCompletion(
     companyId: string,
     proofId: string,
     actorId: string,
-    action: 'APPROVE' | 'REJECT',
     dto: ReviewProofDto,
   ) {
     const actor = await this.prisma.employee.findFirst({
@@ -114,27 +139,100 @@ export class TaskProofService {
       });
       if (!proof) throw new BadRequestException('Pending proof not found.');
 
-      // RBAC for who can review this is handled by the Controller / PermissionsGuard
-      // This service assumes the caller is authorized.
+      const approval = await tx.taskCompletionApproval.upsert({
+        where: { taskId: proof.taskId },
+        create: {
+          companyId,
+          taskId: proof.taskId,
+          proofId: proof.id,
+          status: TaskCompletionApprovalStatus.MANAGER_ACKNOWLEDGED,
+          managerId: actor.id,
+          managerAcknowledgedAt: new Date(),
+          comments: dto.comments,
+        },
+        update: {
+          status: TaskCompletionApprovalStatus.MANAGER_ACKNOWLEDGED,
+          managerId: actor.id,
+          managerAcknowledgedAt: new Date(),
+          comments: dto.comments,
+        },
+      });
 
-      const newProofStatus =
-        action === 'APPROVE'
-          ? ApprovalStatus.APPROVED
-          : ApprovalStatus.REJECTED;
-      const newTaskStatus =
-        action === 'APPROVE' ? TaskStatus.COMPLETED : TaskStatus.IN_PROGRESS;
+      await tx.taskHistory.create({
+        data: {
+          taskId: proof.taskId,
+          companyId,
+          actorId: actor.id,
+          event: 'PROOF_ACKNOWLEDGED_BY_MANAGER',
+          comments: dto.comments || 'Completion acknowledged by manager.',
+        },
+      });
 
-      // Validate task status transition
+      await this.eventPublisher?.publish(tx, {
+        eventType: DomainEventTypes.TASK_COMPLETION_ACKNOWLEDGED,
+        entityId: proof.taskId,
+        entityType: 'Task',
+        companyId,
+        payload: {
+          companyId,
+          taskId: proof.taskId,
+          proofId: proof.id,
+          approvalId: approval.id,
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Completion acknowledged by manager. Awaiting Owner approval.',
+      };
+    });
+  }
+
+  /**
+   * Tier 2 of the two-tier completion sign-off (§7.10).
+   * The Owner performs the distinct "Approve completion" action. Only allowed
+   * after a manager has acknowledged the completion.
+   */
+  async approveCompletion(
+    companyId: string,
+    proofId: string,
+    actorId: string,
+    dto: ReviewProofDto,
+  ) {
+    const actor = await this.prisma.employee.findFirst({
+      where: { userId: actorId, companyId },
+    });
+    if (!actor) throw new BadRequestException('Reviewer not found.');
+
+    return await this.prisma.$transaction(async (tx) => {
+      const proof = await tx.taskProof.findFirst({
+        where: { id: proofId },
+        include: { tasks: true },
+      });
+      if (!proof) throw new BadRequestException('Proof not found.');
+
+      const approval = await tx.taskCompletionApproval.findFirst({
+        where: { taskId: proof.taskId },
+      });
+      if (
+        !approval ||
+        approval.status !== TaskCompletionApprovalStatus.MANAGER_ACKNOWLEDGED
+      ) {
+        throw new BadRequestException(
+          'Completion must be acknowledged by a manager before Owner approval.',
+        );
+      }
+
       this.transitionService.validate(
         'Task',
         proof.tasks.status,
-        newTaskStatus,
+        TaskStatus.COMPLETED,
       );
 
       await tx.taskProof.update({
         where: { id: proofId },
         data: {
-          status: newProofStatus,
+          status: ApprovalStatus.APPROVED,
           reviewerId: actor.id,
           reviewedAt: new Date(),
           reviewerComments: dto.comments,
@@ -143,7 +241,17 @@ export class TaskProofService {
 
       await tx.task.update({
         where: { id: proof.taskId },
-        data: { status: newTaskStatus },
+        data: { status: TaskStatus.COMPLETED },
+      });
+
+      await tx.taskCompletionApproval.update({
+        where: { id: approval.id },
+        data: {
+          status: TaskCompletionApprovalStatus.APPROVED,
+          ownerId: actor.id,
+          ownerApprovedAt: new Date(),
+          comments: dto.comments,
+        },
       });
 
       await tx.taskHistory.create({
@@ -151,26 +259,110 @@ export class TaskProofService {
           taskId: proof.taskId,
           companyId,
           actorId: actor.id,
-          event: action === 'APPROVE' ? 'PROOF_APPROVED' : 'PROOF_REJECTED',
-          comments:
-            dto.comments || `Proof ${action.toLowerCase()} by reviewer.`,
+          event: 'PROOF_APPROVED_BY_OWNER',
+          comments: dto.comments || 'Completion approved by Owner.',
         },
       });
 
-      if (action === 'APPROVE') {
-        await this.eventPublisher?.publish(tx, {
-          eventType: DomainEventTypes.TASK_COMPLETED,
-          entityId: proof.taskId,
-          entityType: 'Task',
+      await this.eventPublisher?.publish(tx, {
+        eventType: DomainEventTypes.TASK_COMPLETION_APPROVED,
+        entityId: proof.taskId,
+        entityType: 'Task',
+        companyId,
+        payload: {
           companyId,
-          payload: {
-            companyId,
-            taskId: proof.taskId,
-          },
-        });
-      }
+          taskId: proof.taskId,
+          proofId: proof.id,
+          approvalId: approval.id,
+        },
+      });
 
-      return { success: true, message: `Proof ${action}` };
+      // Keep existing downstream behavior (creator notification, hold release).
+      await this.eventPublisher?.publish(tx, {
+        eventType: DomainEventTypes.TASK_COMPLETED,
+        entityId: proof.taskId,
+        entityType: 'Task',
+        companyId,
+        payload: {
+          companyId,
+          taskId: proof.taskId,
+        },
+      });
+
+      return { success: true, message: 'Completion approved by Owner' };
+    });
+  }
+
+  /**
+   * Reject the completion at either tier. The task returns to IN_PROGRESS.
+   */
+  async rejectCompletion(
+    companyId: string,
+    proofId: string,
+    actorId: string,
+    dto: ReviewProofDto,
+  ) {
+    const actor = await this.prisma.employee.findFirst({
+      where: { userId: actorId, companyId },
+    });
+    if (!actor) throw new BadRequestException('Reviewer not found.');
+
+    return await this.prisma.$transaction(async (tx) => {
+      const proof = await tx.taskProof.findFirst({
+        where: { id: proofId, status: ApprovalStatus.PENDING },
+        include: { tasks: true },
+      });
+      if (!proof) throw new BadRequestException('Pending proof not found.');
+
+      this.transitionService.validate(
+        'Task',
+        proof.tasks.status,
+        TaskStatus.IN_PROGRESS,
+      );
+
+      await tx.taskProof.update({
+        where: { id: proofId },
+        data: {
+          status: ApprovalStatus.REJECTED,
+          reviewerId: actor.id,
+          reviewedAt: new Date(),
+          reviewerComments: dto.comments,
+        },
+      });
+
+      await tx.task.update({
+        where: { id: proof.taskId },
+        data: { status: TaskStatus.IN_PROGRESS },
+      });
+
+      await tx.taskCompletionApproval.update({
+        where: { taskId: proof.taskId },
+        data: { status: TaskCompletionApprovalStatus.REJECTED },
+      });
+
+      await tx.taskHistory.create({
+        data: {
+          taskId: proof.taskId,
+          companyId,
+          actorId: actor.id,
+          event: 'PROOF_REJECTED',
+          comments: dto.comments || 'Proof rejected.',
+        },
+      });
+
+      await this.eventPublisher?.publish(tx, {
+        eventType: DomainEventTypes.TASK_PROOF_REJECTED,
+        entityId: proof.taskId,
+        entityType: 'Task',
+        companyId,
+        payload: {
+          companyId,
+          taskId: proof.taskId,
+          proofId: proof.id,
+        },
+      });
+
+      return { success: true, message: 'Proof rejected' };
     });
   }
 }

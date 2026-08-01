@@ -639,6 +639,7 @@ model Company {
   taskExtensions                TaskExtension[]
   taskHistories                 TaskHistory[]
   taskProofs                    TaskProof[]
+  taskCompletionApprovals       TaskCompletionApproval[]
   warningHistories              WarningHistory[]
   agreementApprovals            AgreementApproval[]
   inventoryTransactions         InventoryTransaction[]
@@ -2069,6 +2070,27 @@ model TaskProof {
   @@map("task_proofs")
 }
 
+model TaskCompletionApproval {
+  id                    String                       @id @default(cuid())
+  companyId             String
+  taskId                String
+  proofId               String?
+  status                TaskCompletionApprovalStatus @default(PENDING)
+  managerId             String?
+  managerAcknowledgedAt DateTime?
+  ownerId               String?
+  ownerApprovedAt       DateTime?
+  comments              String?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  tasks                 Task                         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  companies             Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId])
+  @@index([companyId])
+  @@map("task_completion_approvals")
+}
+
 model TaskTemplate {
   id                 String              @id @default(cuid())
   companyId          String
@@ -2108,6 +2130,7 @@ model Task {
   taskExtensions                      TaskExtension[]
   taskHistories                       TaskHistory[]
   taskProofs                          TaskProof[]
+  taskCompletionApprovals             TaskCompletionApproval[]
   employeesTasksAssigneeIdToemployees Employee           @relation("tasks_assigneeIdToemployees", fields: [assigneeId], references: [id])
   companies                           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employeesTasksCreatorIdToemployees  Employee           @relation("tasks_creatorIdToemployees", fields: [creatorId], references: [id])
@@ -3087,6 +3110,13 @@ enum TaskStatus {
   COMPLETED
   OVERDUE
   CANCELLED
+}
+
+enum TaskCompletionApprovalStatus {
+  PENDING
+  MANAGER_ACKNOWLEDGED
+  APPROVED
+  REJECTED
 }
 
 enum UserRole {

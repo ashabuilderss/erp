@@ -62,6 +62,42 @@ export class GovernanceNotificationListener {
     );
   }
 
+  @OnEvent(DomainEventTypes.TASK_COMPLETION_ACKNOWLEDGED)
+  async handleTaskCompletionAcknowledged(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handleTaskCompletionAcknowledged',
+      async () => {
+        const taskId = event.entityId;
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const task = await this.prisma.task.findUnique({
+          where: { id: taskId },
+          select: { title: true },
+        });
+        if (!task) return;
+
+        // Notify every OWNER user in the company: the distinct "Approve
+        // completion" step (§7.10) is now actionable.
+        const owners = await this.prisma.user.findMany({
+          where: { companyId, role: 'OWNER', deletedAt: null },
+          select: { id: true },
+        });
+
+        for (const owner of owners) {
+          await this.notificationsService.create({
+            companyId,
+            userId: owner.id,
+            title: 'Approve completion',
+            message: `Task "${task.title}" has been acknowledged by a manager. Please approve completion.`,
+            type: 'TASK',
+            link: `/dashboard/my-tasks/${taskId}`,
+          });
+        }
+      },
+    );
+  }
+
   @OnEvent(DomainEventTypes.APPROVAL_APPROVED)
   async handleApprovalApproved(event: DomainEvent) {
     await this.onApprovalOutcome(event, 'approved', 'APPROVAL_APPROVED');

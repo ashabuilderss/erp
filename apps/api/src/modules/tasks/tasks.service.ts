@@ -267,6 +267,7 @@ export class TasksService {
         include: {
           employeesTasksAssigneeIdToemployees: true,
           employeesTasksCreatorIdToemployees: true,
+          taskCompletionApprovals: true,
           taskProofs: {
             where: { deletedAt: null },
             orderBy: { submittedAt: 'desc' },
@@ -310,6 +311,7 @@ export class TasksService {
         taskProofs: {
           orderBy: { submittedAt: 'desc' },
         },
+        taskCompletionApprovals: true,
       },
     });
 

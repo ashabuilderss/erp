@@ -55,11 +55,33 @@ export const useSubmitTaskProof = () => {
   });
 };
 
-export const useReviewProof = () => {
+export const useAcknowledgeCompletion = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ proofId, action, payload }: { proofId: string; action: 'APPROVE' | 'REJECT'; payload?: any }) =>
-      api.post<any>(`/tasks/proofs/${proofId}/review/${action}`, payload),
+    mutationFn: ({ proofId, payload }: { proofId: string; payload?: any }) =>
+      api.post<any>(`/tasks/proofs/${proofId}/acknowledge`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+};
+
+export const useApproveCompletion = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ proofId, payload }: { proofId: string; payload?: any }) =>
+      api.post<any>(`/tasks/proofs/${proofId}/approve`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+};
+
+export const useRejectCompletion = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ proofId, payload }: { proofId: string; payload?: any }) =>
+      api.post<any>(`/tasks/proofs/${proofId}/reject`, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
