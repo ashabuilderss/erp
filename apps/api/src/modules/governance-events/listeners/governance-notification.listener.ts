@@ -98,6 +98,259 @@ export class GovernanceNotificationListener {
     );
   }
 
+  @OnEvent(DomainEventTypes.DOCUMENT_UPLOADED)
+  async handleDocumentUploaded(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handleDocumentUploaded',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { name, uploadedById } = event.payload as {
+          name?: string;
+          uploadedById?: string;
+        };
+        const label = name ? `"${name}"` : 'A document';
+        await this.notifyOwners(
+          companyId,
+          'Document uploaded',
+          `${label} was uploaded to the document registry.`,
+          '/dashboard/documents',
+          uploadedById,
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.DOCUMENT_DELETED)
+  async handleDocumentDeleted(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handleDocumentDeleted',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { name, deletedById } = event.payload as {
+          name?: string;
+          deletedById?: string;
+        };
+        const label = name ? `"${name}"` : 'A document';
+        await this.notifyOwners(
+          companyId,
+          'Document deleted',
+          `${label} was deleted from the document registry.`,
+          '/dashboard/documents',
+          deletedById,
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.LEAD_STATUS_CHANGED)
+  async handleLeadStatusChanged(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handleLeadStatusChanged',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { metadata, userId } = event.payload as {
+          metadata?: {
+            previousStatus?: string;
+            newStatus?: string;
+            leadName?: string;
+          };
+          userId?: string;
+        };
+        const name = metadata?.leadName ?? 'A lead';
+        const from = metadata?.previousStatus ?? 'previous';
+        const to = metadata?.newStatus ?? 'new';
+        await this.notifyOwners(
+          companyId,
+          'Lead status changed',
+          `${name} moved from ${from} to ${to}.`,
+          '/dashboard/leads',
+          userId,
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.SITE_VISIT_COMPLETED)
+  async handleSiteVisitCompleted(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handleSiteVisitCompleted',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const userId = (event.payload as { userId?: string })?.userId;
+        await this.notifyOwners(
+          companyId,
+          'Site visit completed',
+          'A scheduled site visit has been marked as completed.',
+          '/dashboard/site-visits',
+          userId,
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.BOOKING_CREATED)
+  async handleBookingCreated(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handleBookingCreated',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { metadata, userId } = event.payload as {
+          metadata?: {
+            propertyTitle?: string;
+            customerName?: string;
+            bookingAmount?: number;
+          };
+          userId?: string;
+        };
+        const property = metadata?.propertyTitle ?? 'a property';
+        const customer = metadata?.customerName ?? 'a customer';
+        await this.notifyOwners(
+          companyId,
+          'Booking created',
+          `A booking for ${property} (${customer}) was created.`,
+          '/dashboard/bookings',
+          userId,
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.PROPERTY_CREATED)
+  async handlePropertyCreated(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handlePropertyCreated',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { metadata, userId } = event.payload as {
+          metadata?: { title?: string };
+          userId?: string;
+        };
+        const title = metadata?.title ?? 'A property';
+        await this.notifyOwners(
+          companyId,
+          'Property added',
+          `${title} was added to the property portfolio.`,
+          '/dashboard/properties',
+          userId,
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.PROPERTY_STATUS_CHANGED)
+  async handlePropertyStatusChanged(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handlePropertyStatusChanged',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { metadata, userId } = event.payload as {
+          metadata?: {
+            title?: string;
+            previousStatus?: string;
+            newStatus?: string;
+          };
+          userId?: string;
+        };
+        const title = metadata?.title ?? 'A property';
+        const from = metadata?.previousStatus ?? 'previous';
+        const to = metadata?.newStatus ?? 'new';
+        await this.notifyOwners(
+          companyId,
+          'Property status changed',
+          `${title} moved from ${from} to ${to}.`,
+          '/dashboard/properties',
+          userId,
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.PAYROLL_PROCESSED)
+  async handlePayrollProcessed(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handlePayrollProcessed',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { employeeCount, totalNetPay, heldEmployeeCount } =
+          event.payload as {
+            employeeCount?: number;
+            totalNetPay?: number;
+            heldEmployeeCount?: number;
+          };
+        await this.notifyOwners(
+          companyId,
+          'Payroll processed',
+          `A payroll run was processed for ${employeeCount ?? 0} employees (net ${totalNetPay ?? 0}). ${heldEmployeeCount ? `${heldEmployeeCount} excluded by holds.` : ''}`,
+          '/dashboard/payroll',
+        );
+      },
+    );
+  }
+
+  @OnEvent(DomainEventTypes.ATTENDANCE_FINALIZED)
+  async handleAttendanceFinalized(event: DomainEvent) {
+    await this.processor.process(
+      event,
+      'GovernanceNotificationListener_handleAttendanceFinalized',
+      async () => {
+        const companyId =
+          (event.payload as { companyId?: string })?.companyId ?? '';
+        const { finalized } = event.payload as {
+          finalized?: Array<{ employeeId?: string; status?: string }>;
+        };
+        const count = Array.isArray(finalized) ? finalized.length : 0;
+        await this.notifyOwners(
+          companyId,
+          'Attendance finalized',
+          `An attendance period was finalized for ${count} employees.`,
+          '/dashboard/attendance',
+        );
+      },
+    );
+  }
+
+  private async notifyOwners(
+    companyId: string,
+    title: string,
+    message: string,
+    link: string,
+    actorUserId?: string,
+  ) {
+    if (!companyId) return;
+    const owners = await this.prisma.user.findMany({
+      where: { companyId, role: 'OWNER', deletedAt: null },
+      select: { id: true },
+    });
+    for (const owner of owners) {
+      // Skip the acting user to avoid self-notification noise.
+      if (actorUserId && owner.id === actorUserId) continue;
+      await this.notificationsService.create({
+        companyId,
+        userId: owner.id,
+        title,
+        message,
+        type: 'SYSTEM',
+        link,
+      });
+    }
+  }
+
   @OnEvent(DomainEventTypes.APPROVAL_APPROVED)
   async handleApprovalApproved(event: DomainEvent) {
     await this.onApprovalOutcome(event, 'approved', 'APPROVAL_APPROVED');

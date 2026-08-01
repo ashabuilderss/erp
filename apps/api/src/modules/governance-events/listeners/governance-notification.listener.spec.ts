@@ -40,6 +40,245 @@ describe('GovernanceNotificationListener', () => {
     create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
   });
 
+  const mockOwnersPrisma = (owners: string[]) => ({
+    user: {
+      findMany: jest.fn().mockResolvedValue(owners.map((id) => ({ id }))),
+    },
+  });
+
+  describe('owner feed handlers (§5.30)', () => {
+    it('handleDocumentUploaded notifies company owners', async () => {
+      const processor = mockProcessor();
+      const prisma = mockOwnersPrisma(['user-owner-1', 'user-owner-2']);
+      const notificationsService = mockNotificationsService();
+
+      const { GovernanceNotificationListener } =
+        await import('./governance-notification.listener');
+      const listener = new GovernanceNotificationListener(
+        processor as never,
+        prisma as never,
+        notificationsService as never,
+      );
+
+      await listener.handleDocumentUploaded(
+        createDomainEvent(
+          DomainEventTypes.DOCUMENT_UPLOADED,
+          'doc-1',
+          'DocumentRegistry',
+          { name: 'invoice.pdf', uploadedById: 'user-uploader-1' },
+        ),
+      );
+
+      expect(notificationsService.create).toHaveBeenCalledTimes(2);
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-owner-1',
+          title: 'Document uploaded',
+          message: expect.stringContaining('invoice.pdf'),
+          type: 'SYSTEM',
+          link: '/dashboard/documents',
+        }),
+      );
+    });
+
+    it('handleDocumentUploaded skips the acting user', async () => {
+      const processor = mockProcessor();
+      const prisma = mockOwnersPrisma(['user-owner-1']);
+      const notificationsService = mockNotificationsService();
+
+      const { GovernanceNotificationListener } =
+        await import('./governance-notification.listener');
+      const listener = new GovernanceNotificationListener(
+        processor as never,
+        prisma as never,
+        notificationsService as never,
+      );
+
+      await listener.handleDocumentUploaded(
+        createDomainEvent(DomainEventTypes.DOCUMENT_UPLOADED, 'doc-1', 'DocumentRegistry', {
+          name: 'invoice.pdf',
+          uploadedById: 'user-owner-1',
+        }),
+      );
+
+      expect(notificationsService.create).not.toHaveBeenCalled();
+    });
+
+    it('handleLeadStatusChanged notifies owners with status transition', async () => {
+      const processor = mockProcessor();
+      const prisma = mockOwnersPrisma(['user-owner-1']);
+      const notificationsService = mockNotificationsService();
+
+      const { GovernanceNotificationListener } =
+        await import('./governance-notification.listener');
+      const listener = new GovernanceNotificationListener(
+        processor as never,
+        prisma as never,
+        notificationsService as never,
+      );
+
+      await listener.handleLeadStatusChanged(
+        createDomainEvent(DomainEventTypes.LEAD_STATUS_CHANGED, 'lead-1', 'Lead', {
+          userId: 'emp-1',
+          metadata: {
+            previousStatus: 'NEW',
+            newStatus: 'CONVERTED',
+            leadName: 'Rahul Sharma',
+          },
+        }),
+      );
+
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-owner-1',
+          title: 'Lead status changed',
+          message: expect.stringContaining('Rahul Sharma'),
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('NEW'),
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('CONVERTED'),
+        }),
+      );
+    });
+
+    it('handleBookingCreated notifies owners with property and customer', async () => {
+      const processor = mockProcessor();
+      const prisma = mockOwnersPrisma(['user-owner-1']);
+      const notificationsService = mockNotificationsService();
+
+      const { GovernanceNotificationListener } =
+        await import('./governance-notification.listener');
+      const listener = new GovernanceNotificationListener(
+        processor as never,
+        prisma as never,
+        notificationsService as never,
+      );
+
+      await listener.handleBookingCreated(
+        createDomainEvent(DomainEventTypes.BOOKING_CREATED, 'b-1', 'Booking', {
+          userId: 'emp-1',
+          metadata: { propertyTitle: '2BHK Greenview', customerName: 'Rahul Sharma' },
+        }),
+      );
+
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-owner-1',
+          title: 'Booking created',
+          message: expect.stringContaining('2BHK Greenview'),
+          type: 'SYSTEM',
+          link: '/dashboard/bookings',
+        }),
+      );
+    });
+
+    it('handlePayrollProcessed notifies owners with run summary', async () => {
+      const processor = mockProcessor();
+      const prisma = mockOwnersPrisma(['user-owner-1']);
+      const notificationsService = mockNotificationsService();
+
+      const { GovernanceNotificationListener } =
+        await import('./governance-notification.listener');
+      const listener = new GovernanceNotificationListener(
+        processor as never,
+        prisma as never,
+        notificationsService as never,
+      );
+
+      await listener.handlePayrollProcessed(
+        createDomainEvent(DomainEventTypes.PAYROLL_PROCESSED, 'run-1', 'PayrollRun', {
+          payrollRunId: 'run-1',
+          processedById: 'user-1',
+          employeeCount: 12,
+          totalNetPay: 450000,
+          heldEmployeeCount: 1,
+        }),
+      );
+
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-owner-1',
+          title: 'Payroll processed',
+          type: 'SYSTEM',
+          link: '/dashboard/payroll',
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('12'),
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('450000'),
+        }),
+      );
+    });
+
+    it('handleAttendanceFinalized notifies owners with finalized count', async () => {
+      const processor = mockProcessor();
+      const prisma = mockOwnersPrisma(['user-owner-1']);
+      const notificationsService = mockNotificationsService();
+
+      const { GovernanceNotificationListener } =
+        await import('./governance-notification.listener');
+      const listener = new GovernanceNotificationListener(
+        processor as never,
+        prisma as never,
+        notificationsService as never,
+      );
+
+      await listener.handleAttendanceFinalized(
+        createDomainEvent(
+          DomainEventTypes.ATTENDANCE_FINALIZED,
+          'batch-1',
+          'AttendanceFinalizationBatch',
+          { finalized: [{ employeeId: 'e1' }, { employeeId: 'e2' }] },
+        ),
+      );
+
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-owner-1',
+          title: 'Attendance finalized',
+          message: expect.stringContaining('2'),
+          type: 'SYSTEM',
+          link: '/dashboard/attendance',
+        }),
+      );
+    });
+
+    it('does nothing when companyId is missing', async () => {
+      const processor = mockProcessor();
+      const prisma = mockOwnersPrisma(['user-owner-1']);
+      const notificationsService = mockNotificationsService();
+
+      const { GovernanceNotificationListener } =
+        await import('./governance-notification.listener');
+      const listener = new GovernanceNotificationListener(
+        processor as never,
+        prisma as never,
+        notificationsService as never,
+      );
+
+      await listener.handleBookingCreated(
+        createDomainEvent(DomainEventTypes.BOOKING_CREATED, 'b-1', 'Booking', {
+          companyId: '',
+          metadata: {},
+        }),
+      );
+
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
+      expect(notificationsService.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleTaskCompleted', () => {
     it('routes through the processor and notifies the task creator', async () => {
       const processor = mockProcessor();
