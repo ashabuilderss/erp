@@ -120,7 +120,7 @@ export function Sidebar({ role }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "flex flex-col border-r bg-sidebar transition-all duration-200",
+        "flex h-full flex-col border-r bg-sidebar transition-all duration-200",
         collapsed ? "w-16" : "w-60"
       )}
     >

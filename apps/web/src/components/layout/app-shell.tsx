@@ -23,7 +23,7 @@ export function AppShell({ children, role, user }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen flex">
+    <div className="flex h-screen overflow-hidden">
       {/* Mobile sidebar overlay */}
       <div
         className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 ${
@@ -41,9 +41,9 @@ export function AppShell({ children, role, user }: AppShellProps) {
         <Sidebar role={role} />
       </aside>
 
-      <div className="flex flex-1 flex-col min-h-0">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <TopNav user={user} onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 bg-background p-6">
+        <main className="flex-1 overflow-y-auto bg-background p-6">
           <PageErrorBoundary>{children}</PageErrorBoundary>
         </main>
       </div>
