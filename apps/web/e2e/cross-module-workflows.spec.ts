@@ -32,9 +32,9 @@ const BACKEND_URL = process.env.API_URL || "http://127.0.0.1:4000";
 /* ------------------------------------------------------------------ */
 /*  Auth helpers                                                       */
 /* ------------------------------------------------------------------ */
-let adminToken = "";
-let ownerToken = "";
-let empToken = "";
+const adminToken = "";
+const ownerToken = "";
+const empToken = "";
 
 async function getToken(page: any, email: string, password: string) {
   const resp = await page.request.post(`${BACKEND_URL}/api/v1/auth/login`, {

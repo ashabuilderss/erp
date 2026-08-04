@@ -84,7 +84,7 @@ export default function LeadDetailPage({
         <AlertTriangle className="h-12 w-12 text-yellow-500 mb-4" />
         <h2 className="text-2xl font-semibold mb-2">Lead not found</h2>
         <p className="text-muted-foreground mb-4">
-          This lead may have been removed or you don't have access to it.
+          This lead may have been removed or you don&apos;t have access to it.
         </p>
         <Button onClick={() => router.push("/dashboard/leads")}>
           Back to Leads

@@ -14,16 +14,6 @@ export default function SettingsPage() {
   const role = session?.user?.role;
   const isAdmin = role === "OWNER" || role === "ADMIN";
 
-  if (!isAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <AlertTriangle className="h-12 w-12 text-yellow-500 mb-4" />
-        <h2 className="text-2xl font-semibold mb-2">Access Denied</h2>
-        <p className="text-muted-foreground">You don't have permission to access this page.</p>
-      </div>
-    );
-  }
-
   const { data: company, isLoading } = useCurrentCompany();
   const updateCompany = useUpdateCompany();
   const [draftName, setDraftName] = useState<string | null>(null);
@@ -86,6 +76,16 @@ export default function SettingsPage() {
       .then(data => setTotpEnabled(data.user.totpEnabled))
       .catch(() => {});
   }, []);
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertTriangle className="h-12 w-12 text-yellow-500 mb-4" />
+        <h2 className="text-2xl font-semibold mb-2">Access Denied</h2>
+        <p className="text-muted-foreground">You don&apos;t have permission to access this page.</p>
+      </div>
+    );
+  }
 
   const handleSetup = async () => {
     setTotpLoading(true);
@@ -314,7 +314,7 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <p className="text-sm font-medium">
                 {disableStep === "codes"
-                  ? "Save these backup codes before disabling 2FA. You'll need them if you ever lose access to your authenticator app."
+                      ? "Save these backup codes before disabling 2FA. You’ll need them if you ever lose access to your authenticator app."
                   : "Save these backup codes in a secure place:"}
               </p>
               <div className="relative">
@@ -334,7 +334,7 @@ export default function SettingsPage() {
                 {disableStep === "codes" ? (
                   <>
                     <Button onClick={() => setDisableStep("password")}>
-                      I've saved these codes, continue
+                      I&apos;ve saved these codes, continue
                     </Button>
                     <Button variant="outline" onClick={handleBackupCodes} disabled={totpLoading}>
                       Regenerate

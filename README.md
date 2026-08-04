@@ -1,157 +1,91 @@
 # Asha Builders ERP
 
-Full-stack enterprise resource planning platform for Asha Builders — construction, CRM, HRMS, finance, inventory, and compliance in one monorepo.
+Private enterprise resource planning platform for Asha Builders. It combines CRM, construction operations, HRMS, attendance evidence, tasks, approvals, payroll, finance, inventory, documents, and reporting in one application.
 
-## Tech Stack
+## Architecture
 
-| Layer | Technology |
-|---|---|
-| **Backend** | NestJS 11, Prisma ORM, PostgreSQL 16, Redis 7 |
-| **Frontend** | Next.js 16 (App Router), React 19, Tailwind CSS 4, shadcn/ui |
-| **Auth** | Auth.js (NextAuth v5) with email/password + role-based access |
-| **Testing** | Jest (unit/integration), Playwright (E2E) |
-| **Infra** | Docker multi-stage builds, Docker Compose, GitHub Actions CI |
+| Component | Technology | Production host |
+| --- | --- | --- |
+| Web application | Next.js 16, React 19, Auth.js, Tailwind CSS | Vercel |
+| API | NestJS 11, Prisma | Render |
+| Database | PostgreSQL | Render Postgres |
+| Realtime | Socket.IO | Render API |
 
-## Project Structure
+The browser uses the Vercel web application. Its server-side proxy and authentication routes call the Render API through `API_URL`; direct sign-in and real-time connections use `NEXT_PUBLIC_API_URL`.
 
-```
-dashboard/
-├── apps/
-│   ├── api/          # NestJS backend (port 4000)
-│   │   ├── src/
-│   │   │   ├── common/       # Guards, decorators, DTOs, auth/permissions
-│   │   │   ├── modules/      # 38 domain modules
-│   │   │   └── main.ts
-│   │   ├── prisma/
-│   │   │   ├── schema.prisma
-│   │   │   └── seed.ts
-│   │   └── Dockerfile
-│   └── web/          # Next.js frontend (port 3000)
-│       ├── src/app/          # App Router pages
-│       ├── src/components/   # Shared UI components
-│       ├── src/hooks/api/    # React Query hooks (48)
-│       ├── e2e/              # Playwright tests (20 files)
-│       └── Dockerfile
-├── scripts/          # Dev runner, DB backup/restore
-├── docs/             # Production runbook, release checklist, SRS
-└── docker-compose.yml
-```
+## Local development
 
-## Quick Start (Local Development)
-
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL 16 (port 5433) or Docker
-- Redis (optional, for caching)
-
-### Setup
+Prerequisites: Node.js 20 or later, PostgreSQL 16, and optionally Redis 7.
 
 ```bash
-# Clone and install
-git clone <repo-url> && cd dashboard
-npm install
-
-# Configure environment
-cp .env.example apps/api/.env
-cp .env.example apps/web/.env.local
-# Edit apps/api/.env — set DATABASE_URL, AUTH_SECRET, ENCRYPTION_KEY
-
-# Start database (if not using local Postgres)
-docker compose -f docker-compose.yml up -d postgres redis
-
-# Push schema + seed
+npm ci
+Copy-Item .env.example .env
+# Set DATABASE_URL, AUTH_SECRET, and ENCRYPTION_KEY in .env.
 npx prisma db push --schema=apps/api/prisma/schema.prisma
-npx tsx apps/api/prisma/seed.ts
-
-# Start dev servers (API + Web concurrently)
+npm run prisma:seed --workspace=apps/api
 npm run dev
 ```
 
 The API runs at `http://localhost:4000` and the web app at `http://localhost:3000`.
 
-### Default Login
-
-| Email | Password | Role |
-|---|---|---|
-| admin@company.com | Admin@123 | OWNER (full access) |
-
-## Available Scripts
-
-| Command | Description |
-|---|---|
-| `npm run dev` | Start API + Web concurrently |
-| `npm run build` | Build both apps for production |
-| `npm run lint:all` | Lint both apps |
-| `npm run test:all` | Run API unit + E2E tests |
-| `npm run verify` | Lint + build + test (full CI check) |
-| `npm run docker:up` | Production Docker stack |
-| `npm run db:seed` | Seed database |
-| `npm run db:backup` | Backup PostgreSQL |
-
-## RBAC System
-
-8 roles with granular permission-based access control:
-
-| Role | Scope |
-|---|---|
-| **OWNER** | Full access — bypasses all guards |
-| **ADMIN** | All permissions (same as OWNER) |
-| **HR_MANAGER** | HR modules, assets, training, meetings, agreements |
-| **MANAGER** | Team management, projects, CRM read, designations |
-| **TEAM_LEAD** | Project tasks, CRM, employees, training, meetings |
-| **EMPLOYEE** | Own profile, tasks, training, meetings |
-| **FIELD_EMPLOYEE** | Site visits, attendance, attendance-regularization |
-| **ACCOUNTS** | Finance, payroll, invoices, payments |
-
-115 permission constants across 38 modules. Permissions checked via `@RequirePermissions()` decorator on every endpoint.
-
-## Docker Deployment
+## Validation
 
 ```bash
-# Copy and configure production env
-cp .env.production.example .env
-# Edit .env — set all required secrets
-
-# Build and start
-docker compose build
-docker compose up -d
-
-# Verify
-curl http://localhost:4000/api/health
-# Open http://localhost:3000/sign-in
+npm run lint:all
+npx prisma generate --schema=apps/api/prisma/schema.prisma
+npm run build
+npm run test --workspace=apps/api -- --runInBand
 ```
 
-See [docs/production/runbook.md](docs/production/runbook.md) for full deployment procedures, backup/restore, and post-handoff steps.
+API end-to-end tests require an available PostgreSQL instance and seeded test data. Web end-to-end tests require both applications running.
 
-## Testing
+## Production deployment
 
-```bash
-# Unit tests (API)
-npm run test --workspace=apps/api
+### 1. Render API and PostgreSQL
 
-# E2E tests (API)
-npm run test:e2e --workspace=apps/api
+Create a Render Blueprint from `render.yaml` in the private GitHub repository. The Blueprint creates:
 
-# Playwright tests (Web)
-npm run test:e2e --workspace=apps/web
+- `dashboard-api`, a public Node web service with `/api/health` health checks.
+- `dashboard-postgres`, the managed PostgreSQL database.
 
-# Full test suite
-npm run test:all
+Before the first deploy, configure these Render service variables in the dashboard (never in Git):
+
+- `AUTH_SECRET` — random value, at least 32 characters; use the exact same value in Vercel.
+- `ENCRYPTION_KEY` — random value, at least 32 characters.
+- `FRONTEND_URL` — final Vercel production URL without a trailing slash.
+- `SEED_COMPANY_NAME`, `SEED_COMPANY_SLUG`, `SEED_ADMIN_EMAIL`, and `SEED_ADMIN_PASSWORD` — one-time owner account details supplied by the owner. Rotate the password immediately after first login and remove it from Render.
+
+Migrations run safely before each API start. The initial seed runs once through Render's initial-deploy hook and rejects placeholder production credentials.
+
+### 2. Vercel web application
+
+Import the same private repository into the **ABC builders** Vercel team. Set the Vercel project Root Directory to `apps/web`; the project configuration is in `apps/web/vercel.json`.
+
+Set these Vercel production environment variables:
+
+- `AUTH_SECRET` — the exact shared Render value.
+- `AUTH_URL` — the Vercel production URL, without a trailing slash.
+- `AUTH_TRUST_HOST` — `true`.
+- `API_URL` — the Render API origin, for example `https://dashboard-api.onrender.com`.
+- `NEXT_PUBLIC_API_URL` — the same Render API origin, for direct sign-in and Socket.IO.
+- Optional Sentry values: `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, and `NEXT_PUBLIC_SENTRY_DSN`.
+
+After the first Vercel deployment provides its URL, update Render `FRONTEND_URL` to that value and redeploy the API. Then verify:
+
+```text
+https://<render-api>/api/health
+https://<vercel-web>/sign-in
 ```
 
-CI runs on every push/PR via GitHub Actions: lint, typecheck, build, unit tests, API E2E tests.
+## Free-tier limits
 
-## Environment Variables
+Render free web services can spin down after 15 minutes of inactivity and have ephemeral local storage. Free Render Postgres expires after 30 days and has no backups. This setup is suitable for an initial demonstration, not a durable business production environment. Upgrade the database and API before operational use.
 
-See [`.env.example`](.env.example) for local development and [`.env.production.example`](.env.production.example) for production deployment.
+## Security
 
-Key variables:
-
-- `DATABASE_URL` — PostgreSQL connection string
-- `AUTH_SECRET` — Auth.js session secret (min 32 chars)
-- `ENCRYPTION_KEY` — Data encryption key (min 32 chars)
-- `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` — Initial admin credentials
+- `.env` files are ignored and must never be committed.
+- Use separate secrets for each environment; share only `AUTH_SECRET` between the API and web application.
+- Do not use seed defaults in production. Change the initial owner password immediately after first sign-in.
 
 ## License
 
