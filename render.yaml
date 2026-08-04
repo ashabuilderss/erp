@@ -4,13 +4,15 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: npm ci && npm run build --workspace=apps/api
+    buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096" npm run build --workspace=apps/api
     startCommand: npm run prisma:migrate:deploy --workspace=apps/api && npm run start:prod --workspace=apps/api
     initialDeployHook: npm run prisma:seed --workspace=apps/api
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=4096"
       # Database — Supabase (PostgreSQL) connection string.
       # Create a project at https://supabase.com, then copy the
       # connection string from Project Settings → Database → Connection string.
