@@ -1,0 +1,10 @@
+[build]
+  # We run the build from the root to ensure monorepo dependencies (node_modules) are resolved
+  command = "npm run build --workspace=apps/web"
+  
+  # The publish directory is where Next.js outputs the build inside the web app
+  publish = "apps/web/.next"
+
+[[plugins]]
+  # This plugin is required for Next.js to work properly on Netlify (SSR, Image Optimization, etc)
+  package = "@netlify/plugin-nextjs"
