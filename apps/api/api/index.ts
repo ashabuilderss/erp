@@ -1,0 +1,59 @@
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { AppModule } from '../src/app.module';
+import { LoggerService } from '../src/common/logger/logger.service';
+import { PrismaExceptionFilter } from '../src/common/filters/prisma-exception.filter';
+import { IdempotencyGuard } from '../src/common/guards/idempotency.guard';
+import { IdempotencyService } from '../src/common/services/idempotency.service';
+import { Express } from 'express';
+
+let cachedServer: Express;
+
+async function bootstrapServer(): Promise<Express> {
+  if (!cachedServer) {
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+      rawBody: true,
+    });
+
+    const logger = app.get(LoggerService);
+    app.useLogger(logger);
+
+    app.setGlobalPrefix('api/v1');
+    app.use(
+      helmet({
+        crossOriginEmbedderPolicy: false,
+      }),
+    );
+    app.use(cookieParser());
+    app.enableCors({
+      origin: process.env.FRONTEND_URL || '*',
+      credentials: true,
+    });
+
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+
+    app.useGlobalFilters(new PrismaExceptionFilter());
+
+    const reflector = app.get(Reflector);
+    const idempotencyService = app.get(IdempotencyService);
+    app.useGlobalGuards(new IdempotencyGuard(reflector, idempotencyService));
+
+    await app.init();
+    cachedServer = app.getHttpAdapter().getInstance() as Express;
+  }
+  return cachedServer;
+}
+
+export default async function handler(req: any, res: any) {
+  const server = await bootstrapServer();
+  return server(req, res);
+}
