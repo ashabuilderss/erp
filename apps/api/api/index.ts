@@ -13,8 +13,19 @@ import { Express } from 'express';
 
 let cachedServer: Express;
 
+function validateEnv(): void {
+  const required = ['DATABASE_URL', 'AUTH_SECRET'];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(
+      `FATAL: Missing required environment variables: ${missing.join(', ')}`,
+    );
+  }
+}
+
 async function bootstrapServer(): Promise<Express> {
   if (!cachedServer) {
+    validateEnv();
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
       rawBody: true,
     });
