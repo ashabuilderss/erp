@@ -7,7 +7,6 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../config/prisma.service';
 import { EncryptionService } from '../../common/services/encryption.service';
-import * as otplib from 'otplib';
 import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, createHash } from 'crypto';
@@ -47,11 +46,17 @@ export class TwoFactorService {
     return value.startsWith('enc:') || value.includes(':');
   }
 
+  private async getOtplib() {
+    const mod = await import('otplib');
+    return mod.default || mod;
+  }
+
   async setup(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
     if (user.totpEnabled) throw new BadRequestException('2FA already enabled');
 
+    const otplib = await this.getOtplib();
     const secret = otplib.generateSecret();
     const issuer = 'AshaBuilders';
     const otpauthUrl = otplib.generateURI({
@@ -78,6 +83,7 @@ export class TwoFactorService {
     if (user.totpEnabled) throw new BadRequestException('2FA already enabled');
 
     const decrypted = this.decryptSecret(user.totpSecret);
+    const otplib = await this.getOtplib();
     const result = await otplib.verify({ token, secret: decrypted });
     if (!result.valid) throw new BadRequestException('Invalid verification code');
 
@@ -113,6 +119,7 @@ export class TwoFactorService {
       throw new UnauthorizedException('2FA is not enabled for this account');
     }
     const decrypted = this.decryptSecret(user.totpSecret);
+    const otplib = await this.getOtplib();
     const result = await otplib.verify({ token, secret: decrypted });
     if (!result.valid) {
       throw new UnauthorizedException('Invalid verification code');
@@ -219,6 +226,7 @@ export class TwoFactorService {
     }
 
     const decrypted = this.decryptSecret(user.totpSecret);
+    const otplib = await this.getOtplib();
     const result = await otplib.verify({ token, secret: decrypted });
     if (!result.valid) {
       if (user.backupCodes) {
