@@ -9,8 +9,68 @@ import { PrismaService } from '../../config/prisma.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcrypt';
-import { randomBytes, createHash } from 'crypto';
+import { createHmac, randomBytes, createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
+
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function generateTotpSecret(length = 20): string {
+  const bytes = randomBytes(length);
+  let secret = '';
+  for (let i = 0; i < bytes.length; i++) {
+    secret += ALPHABET[bytes[i] % 32];
+  }
+  return secret;
+}
+
+function generateTotpURI(options: { issuer: string; label: string; secret: string }): string {
+  const label = encodeURIComponent(options.label);
+  const issuer = encodeURIComponent(options.issuer);
+  return `otpauth://totp/${issuer}:${label}?secret=${options.secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+}
+
+function base32Decode(base32Str: string): Buffer {
+  let bits = '';
+  const cleaned = base32Str.toUpperCase().replace(/=/g, '');
+  for (let i = 0; i < cleaned.length; i++) {
+    const val = ALPHABET.indexOf(cleaned[i]);
+    if (val !== -1) {
+      bits += val.toString(2).padStart(5, '0');
+    }
+  }
+  const bytes: number[] = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) {
+    bytes.push(parseInt(bits.substring(i, i + 8), 2));
+  }
+  return Buffer.from(bytes);
+}
+
+function verifyTotpToken(token: string, secret: string, window = 1): boolean {
+  if (!token || token.length !== 6) return false;
+  try {
+    const key = base32Decode(secret);
+    const epoch = Math.floor(Date.now() / 1000);
+    const currentStep = Math.floor(epoch / 30);
+
+    for (let i = -window; i <= window; i++) {
+      const step = currentStep + i;
+      const buf = Buffer.alloc(8);
+      buf.writeBigInt64BE(BigInt(step));
+      const hmac = createHmac('sha1', key).update(buf).digest();
+      const offset = hmac[hmac.length - 1] & 0xf;
+      const code =
+        ((hmac[offset] & 0x7f) << 24) |
+        ((hmac[offset + 1] & 0xff) << 16) |
+        ((hmac[offset + 2] & 0xff) << 8) |
+        (hmac[offset + 3] & 0xff);
+      const otp = (code % 1_000_000).toString().padStart(6, '0');
+      if (otp === token) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
 
 const TEMP_TOKEN_EXPIRY_MINUTES = 5;
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
@@ -46,21 +106,14 @@ export class TwoFactorService {
     return value.startsWith('enc:') || value.includes(':');
   }
 
-  private async getOtplib() {
-    const mod = await import('otplib');
-    return mod.default || mod;
-  }
-
   async setup(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
     if (user.totpEnabled) throw new BadRequestException('2FA already enabled');
 
-    const otplib = await this.getOtplib();
-    const secret = otplib.generateSecret();
+    const secret = generateTotpSecret();
     const issuer = 'AshaBuilders';
-    const otpauthUrl = otplib.generateURI({
-      strategy: 'totp',
+    const otpauthUrl = generateTotpURI({
       issuer,
       label: user.email,
       secret,
@@ -83,9 +136,8 @@ export class TwoFactorService {
     if (user.totpEnabled) throw new BadRequestException('2FA already enabled');
 
     const decrypted = this.decryptSecret(user.totpSecret);
-    const otplib = await this.getOtplib();
-    const result = await otplib.verify({ token, secret: decrypted });
-    if (!result.valid) throw new BadRequestException('Invalid verification code');
+    const isValid = verifyTotpToken(token, decrypted);
+    if (!isValid) throw new BadRequestException('Invalid verification code');
 
     const backupCodes = Array.from({ length: 8 }, () =>
       randomBytes(4).toString('hex'),
@@ -119,9 +171,8 @@ export class TwoFactorService {
       throw new UnauthorizedException('2FA is not enabled for this account');
     }
     const decrypted = this.decryptSecret(user.totpSecret);
-    const otplib = await this.getOtplib();
-    const result = await otplib.verify({ token, secret: decrypted });
-    if (!result.valid) {
+    const isValid = verifyTotpToken(token, decrypted);
+    if (!isValid) {
       throw new UnauthorizedException('Invalid verification code');
     }
     return { valid: true };
@@ -226,9 +277,8 @@ export class TwoFactorService {
     }
 
     const decrypted = this.decryptSecret(user.totpSecret);
-    const otplib = await this.getOtplib();
-    const result = await otplib.verify({ token, secret: decrypted });
-    if (!result.valid) {
+    const isValid = verifyTotpToken(token, decrypted);
+    if (!isValid) {
       if (user.backupCodes) {
         const codes = user.backupCodes as string[];
         for (let i = 0; i < codes.length; i++) {
