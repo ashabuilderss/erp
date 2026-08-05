@@ -1,11 +1,17 @@
 {
   "version": 2,
   "buildCommand": "npx prisma generate",
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "node_modules/.prisma/client/**"
+  "builds": [
+    {
+      "src": "api/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "node_modules/.prisma/client/**"
+        ]
+      }
     }
-  },
+  ],
   "routes": [
     {
       "src": "/(.*)",
