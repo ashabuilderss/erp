@@ -1,0 +1,73 @@
+import { ExportConfigService } from './export-config.service';
+import { CreateExportConfigDto, UpdateExportConfigDto } from './dto/export-config.dto';
+export declare class ExportConfigController {
+    private readonly service;
+    constructor(service: ExportConfigService);
+    list(companyId: string): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        exportType: string;
+        sheetId: string | null;
+        sheetName: string | null;
+        syncEnabled: boolean;
+        syncSchedule: string | null;
+        syncStatus: import(".prisma/client").$Enums.ExportSyncStatus;
+        allowedRoles: import("@prisma/client/runtime/client").JsonValue;
+        grantedUsers: import("@prisma/client/runtime/client").JsonValue;
+        lastSyncedAt: Date | null;
+        lastSyncError: string | null;
+    }[]>;
+    getById(companyId: string, id: string): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        exportType: string;
+        sheetId: string | null;
+        sheetName: string | null;
+        syncEnabled: boolean;
+        syncSchedule: string | null;
+        syncStatus: import(".prisma/client").$Enums.ExportSyncStatus;
+        allowedRoles: import("@prisma/client/runtime/client").JsonValue;
+        grantedUsers: import("@prisma/client/runtime/client").JsonValue;
+        lastSyncedAt: Date | null;
+        lastSyncError: string | null;
+    }>;
+    create(companyId: string, dto: CreateExportConfigDto): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        exportType: string;
+        sheetId: string | null;
+        sheetName: string | null;
+        syncEnabled: boolean;
+        syncSchedule: string | null;
+        syncStatus: import(".prisma/client").$Enums.ExportSyncStatus;
+        allowedRoles: import("@prisma/client/runtime/client").JsonValue;
+        grantedUsers: import("@prisma/client/runtime/client").JsonValue;
+        lastSyncedAt: Date | null;
+        lastSyncError: string | null;
+    }>;
+    update(companyId: string, id: string, dto: UpdateExportConfigDto): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        exportType: string;
+        sheetId: string | null;
+        sheetName: string | null;
+        syncEnabled: boolean;
+        syncSchedule: string | null;
+        syncStatus: import(".prisma/client").$Enums.ExportSyncStatus;
+        allowedRoles: import("@prisma/client/runtime/client").JsonValue;
+        grantedUsers: import("@prisma/client/runtime/client").JsonValue;
+        lastSyncedAt: Date | null;
+        lastSyncError: string | null;
+    }>;
+    remove(companyId: string, id: string): Promise<void>;
+}

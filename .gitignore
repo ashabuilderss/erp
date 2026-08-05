@@ -6,6 +6,8 @@ test-results/
 .tmp/
 .docker-config/
 dist/
+!apps/api/dist/
+!apps/api/dist/**
 .next/
 .env
 .env.local

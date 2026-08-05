@@ -1,0 +1,478 @@
+import { PerformanceService } from './performance.service';
+import { CalculateScoreDto } from './dto/calculate-score.dto';
+import { RateEmployeeDto } from './dto/rate-employee.dto';
+import { GetTrendsDto } from './dto/get-trends.dto';
+import { GetLeaderboardDto } from './dto/get-leaderboard.dto';
+import { ListScoresDto } from './dto/list-scores.dto';
+export declare class PerformanceScoreController {
+    private readonly performanceService;
+    constructor(performanceService: PerformanceService);
+    calculateScore(dto: CalculateScoreDto, companyId: string, userId: string): Promise<{
+        employees: {
+            users: {
+                role: import(".prisma/client").$Enums.UserRole;
+                id: string;
+                email: string;
+                firstName: string;
+                lastName: string;
+                avatarUrl: string | null;
+                isActive: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+                notificationPreferences: import("@prisma/client/runtime/client").JsonValue | null;
+                companyId: string;
+                backupCodes: import("@prisma/client/runtime/client").JsonValue | null;
+                deletedAt: Date | null;
+                hashedPassword: string | null;
+                totpEnabled: boolean;
+                totpSecret: string | null;
+                totpVerifiedAt: Date | null;
+                roleId: string | null;
+            } | null;
+            departments: {
+                name: string;
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                description: string | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            userId: string | null;
+            teamId: string | null;
+            departmentId: string;
+            status: import(".prisma/client").$Enums.EmployeeStatus;
+            employeeCode: string;
+            designationId: string;
+            phone: string | null;
+            dateOfJoining: Date | null;
+            salary: import("@prisma/client-runtime-utils").Decimal | null;
+            address: string | null;
+            managerId: string | null;
+            staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+        };
+        managerRatings: ({
+            employees: {
+                users: {
+                    role: import(".prisma/client").$Enums.UserRole;
+                    id: string;
+                    email: string;
+                    firstName: string;
+                    lastName: string;
+                    avatarUrl: string | null;
+                    isActive: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    notificationPreferences: import("@prisma/client/runtime/client").JsonValue | null;
+                    companyId: string;
+                    backupCodes: import("@prisma/client/runtime/client").JsonValue | null;
+                    deletedAt: Date | null;
+                    hashedPassword: string | null;
+                    totpEnabled: boolean;
+                    totpSecret: string | null;
+                    totpVerifiedAt: Date | null;
+                    roleId: string | null;
+                } | null;
+            } & {
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                userId: string | null;
+                teamId: string | null;
+                departmentId: string;
+                status: import(".prisma/client").$Enums.EmployeeStatus;
+                employeeCode: string;
+                designationId: string;
+                phone: string | null;
+                dateOfJoining: Date | null;
+                salary: import("@prisma/client-runtime-utils").Decimal | null;
+                address: string | null;
+                managerId: string | null;
+                staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            score: number;
+            comment: string | null;
+            ratedAt: Date;
+            performanceScoreId: string;
+            ratedById: string;
+        })[];
+    } & {
+        id: string;
+        createdAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        employeeId: string;
+        period: string;
+        periodType: import(".prisma/client").$Enums.PerformancePeriod;
+        taskScore: number;
+        attendanceScore: number;
+        eodScore: number;
+        managerScore: number;
+        compositeScore: number;
+        trend: import(".prisma/client").$Enums.TrendDirection;
+        calculatedById: string | null;
+        calculatedAt: Date;
+    }>;
+    rateEmployee(dto: RateEmployeeDto, companyId: string, userId: string): Promise<{
+        id: string;
+    }>;
+    getTrends(query: GetTrendsDto, companyId: string): Promise<{
+        id: string;
+        companyId: string;
+        deletedAt: Date | null;
+        employeeId: string;
+        projectionVersion: number;
+        lastProcessedEventId: string | null;
+        lastProcessedCorrelationId: string | null;
+        lastProjectionUpdate: Date;
+        period: string;
+        periodType: import(".prisma/client").$Enums.PerformancePeriod;
+        taskScore: number;
+        attendanceScore: number;
+        eodScore: number;
+        managerScore: number;
+        compositeScore: number;
+        trend: import(".prisma/client").$Enums.TrendDirection;
+        previousCompositeScore: number | null;
+        scoreDelta: number | null;
+    }[]>;
+    getLeaderboard(query: GetLeaderboardDto, companyId: string): Promise<{
+        rank: number;
+        employeeId: string;
+        employeeName: string;
+        department: string;
+        designation: string;
+        compositeScore: number;
+        taskScore: number;
+        attendanceScore: number;
+        eodScore: number;
+        managerScore: number;
+        trend: import(".prisma/client").$Enums.TrendDirection;
+    }[]>;
+    listScores(query: ListScoresDto, companyId: string): Promise<{
+        data: ({
+            employees: {
+                users: {
+                    role: import(".prisma/client").$Enums.UserRole;
+                    id: string;
+                    email: string;
+                    firstName: string;
+                    lastName: string;
+                    avatarUrl: string | null;
+                    isActive: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    notificationPreferences: import("@prisma/client/runtime/client").JsonValue | null;
+                    companyId: string;
+                    backupCodes: import("@prisma/client/runtime/client").JsonValue | null;
+                    deletedAt: Date | null;
+                    hashedPassword: string | null;
+                    totpEnabled: boolean;
+                    totpSecret: string | null;
+                    totpVerifiedAt: Date | null;
+                    roleId: string | null;
+                } | null;
+                departments: {
+                    name: string;
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    companyId: string;
+                    deletedAt: Date | null;
+                    description: string | null;
+                };
+            } & {
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                userId: string | null;
+                teamId: string | null;
+                departmentId: string;
+                status: import(".prisma/client").$Enums.EmployeeStatus;
+                employeeCode: string;
+                designationId: string;
+                phone: string | null;
+                dateOfJoining: Date | null;
+                salary: import("@prisma/client-runtime-utils").Decimal | null;
+                address: string | null;
+                managerId: string | null;
+                staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            employeeId: string;
+            period: string;
+            periodType: import(".prisma/client").$Enums.PerformancePeriod;
+            taskScore: number;
+            attendanceScore: number;
+            eodScore: number;
+            managerScore: number;
+            compositeScore: number;
+            trend: import(".prisma/client").$Enums.TrendDirection;
+            calculatedById: string | null;
+            calculatedAt: Date;
+        })[];
+        meta: {
+            total: number;
+            page: number;
+            limit: number;
+            totalPages: number;
+        };
+    }>;
+    getScore(id: string, companyId: string): Promise<{
+        employees: {
+            users: {
+                role: import(".prisma/client").$Enums.UserRole;
+                id: string;
+                email: string;
+                firstName: string;
+                lastName: string;
+                avatarUrl: string | null;
+                isActive: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+                notificationPreferences: import("@prisma/client/runtime/client").JsonValue | null;
+                companyId: string;
+                backupCodes: import("@prisma/client/runtime/client").JsonValue | null;
+                deletedAt: Date | null;
+                hashedPassword: string | null;
+                totpEnabled: boolean;
+                totpSecret: string | null;
+                totpVerifiedAt: Date | null;
+                roleId: string | null;
+            } | null;
+            departments: {
+                name: string;
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                description: string | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            userId: string | null;
+            teamId: string | null;
+            departmentId: string;
+            status: import(".prisma/client").$Enums.EmployeeStatus;
+            employeeCode: string;
+            designationId: string;
+            phone: string | null;
+            dateOfJoining: Date | null;
+            salary: import("@prisma/client-runtime-utils").Decimal | null;
+            address: string | null;
+            managerId: string | null;
+            staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+        };
+        managerRatings: ({
+            employees: {
+                users: {
+                    role: import(".prisma/client").$Enums.UserRole;
+                    id: string;
+                    email: string;
+                    firstName: string;
+                    lastName: string;
+                    avatarUrl: string | null;
+                    isActive: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    notificationPreferences: import("@prisma/client/runtime/client").JsonValue | null;
+                    companyId: string;
+                    backupCodes: import("@prisma/client/runtime/client").JsonValue | null;
+                    deletedAt: Date | null;
+                    hashedPassword: string | null;
+                    totpEnabled: boolean;
+                    totpSecret: string | null;
+                    totpVerifiedAt: Date | null;
+                    roleId: string | null;
+                } | null;
+            } & {
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                userId: string | null;
+                teamId: string | null;
+                departmentId: string;
+                status: import(".prisma/client").$Enums.EmployeeStatus;
+                employeeCode: string;
+                designationId: string;
+                phone: string | null;
+                dateOfJoining: Date | null;
+                salary: import("@prisma/client-runtime-utils").Decimal | null;
+                address: string | null;
+                managerId: string | null;
+                staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            score: number;
+            comment: string | null;
+            ratedAt: Date;
+            performanceScoreId: string;
+            ratedById: string;
+        })[];
+    } & {
+        id: string;
+        createdAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        employeeId: string;
+        period: string;
+        periodType: import(".prisma/client").$Enums.PerformancePeriod;
+        taskScore: number;
+        attendanceScore: number;
+        eodScore: number;
+        managerScore: number;
+        compositeScore: number;
+        trend: import(".prisma/client").$Enums.TrendDirection;
+        calculatedById: string | null;
+        calculatedAt: Date;
+    }>;
+    recalculateScore(dto: CalculateScoreDto, companyId: string, userId: string): Promise<{
+        employees: {
+            users: {
+                role: import(".prisma/client").$Enums.UserRole;
+                id: string;
+                email: string;
+                firstName: string;
+                lastName: string;
+                avatarUrl: string | null;
+                isActive: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+                notificationPreferences: import("@prisma/client/runtime/client").JsonValue | null;
+                companyId: string;
+                backupCodes: import("@prisma/client/runtime/client").JsonValue | null;
+                deletedAt: Date | null;
+                hashedPassword: string | null;
+                totpEnabled: boolean;
+                totpSecret: string | null;
+                totpVerifiedAt: Date | null;
+                roleId: string | null;
+            } | null;
+            departments: {
+                name: string;
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                description: string | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            userId: string | null;
+            teamId: string | null;
+            departmentId: string;
+            status: import(".prisma/client").$Enums.EmployeeStatus;
+            employeeCode: string;
+            designationId: string;
+            phone: string | null;
+            dateOfJoining: Date | null;
+            salary: import("@prisma/client-runtime-utils").Decimal | null;
+            address: string | null;
+            managerId: string | null;
+            staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+        };
+        managerRatings: ({
+            employees: {
+                users: {
+                    role: import(".prisma/client").$Enums.UserRole;
+                    id: string;
+                    email: string;
+                    firstName: string;
+                    lastName: string;
+                    avatarUrl: string | null;
+                    isActive: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    notificationPreferences: import("@prisma/client/runtime/client").JsonValue | null;
+                    companyId: string;
+                    backupCodes: import("@prisma/client/runtime/client").JsonValue | null;
+                    deletedAt: Date | null;
+                    hashedPassword: string | null;
+                    totpEnabled: boolean;
+                    totpSecret: string | null;
+                    totpVerifiedAt: Date | null;
+                    roleId: string | null;
+                } | null;
+            } & {
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                userId: string | null;
+                teamId: string | null;
+                departmentId: string;
+                status: import(".prisma/client").$Enums.EmployeeStatus;
+                employeeCode: string;
+                designationId: string;
+                phone: string | null;
+                dateOfJoining: Date | null;
+                salary: import("@prisma/client-runtime-utils").Decimal | null;
+                address: string | null;
+                managerId: string | null;
+                staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            score: number;
+            comment: string | null;
+            ratedAt: Date;
+            performanceScoreId: string;
+            ratedById: string;
+        })[];
+    } & {
+        id: string;
+        createdAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        employeeId: string;
+        period: string;
+        periodType: import(".prisma/client").$Enums.PerformancePeriod;
+        taskScore: number;
+        attendanceScore: number;
+        eodScore: number;
+        managerScore: number;
+        compositeScore: number;
+        trend: import(".prisma/client").$Enums.TrendDirection;
+        calculatedById: string | null;
+        calculatedAt: Date;
+    }>;
+}

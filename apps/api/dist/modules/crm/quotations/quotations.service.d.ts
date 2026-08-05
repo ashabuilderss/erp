@@ -1,0 +1,193 @@
+import { PrismaService } from '../../../config/prisma.service';
+import { TransitionService } from '../../../common/services/transition.service';
+import { CreateQuotationDto } from './dto/create-quotation.dto';
+import { QueryQuotationDto } from './dto/query-quotation.dto';
+import { UpdateQuotationStatusDto } from './dto/update-quotation-status.dto';
+import { QuotationPdfService } from './quotation-pdf.service';
+export declare class QuotationsService {
+    private readonly prisma;
+    private readonly pdfService;
+    private readonly transitionService;
+    constructor(prisma: PrismaService, pdfService: QuotationPdfService, transitionService: TransitionService);
+    create(companyId: string, employeeId: string, dto: CreateQuotationDto): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        createdById: string;
+        status: import(".prisma/client").$Enums.QuotationStatus;
+        propertyId: string | null;
+        notes: string | null;
+        customerId: string | null;
+        leadId: string | null;
+        referenceNumber: string;
+        totalAmount: import("@prisma/client-runtime-utils").Decimal;
+        breakdown: import("@prisma/client/runtime/client").JsonValue;
+        validUntil: Date;
+    }>;
+    findAll(companyId: string, query: QueryQuotationDto): Promise<{
+        items: ({
+            customer: {
+                type: import(".prisma/client").$Enums.CustomerType;
+                name: string;
+                id: string;
+                email: string | null;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                createdById: string | null;
+                phone: string | null;
+                address: string | null;
+                source: string | null;
+                notes: string | null;
+            } | null;
+            lead: {
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                assignedToEmployeeId: string | null;
+                status: import(".prisma/client").$Enums.LeadStatus;
+                propertyId: string | null;
+                customerName: string;
+                customerEmail: string | null;
+                customerPhone: string | null;
+                source: import(".prisma/client").$Enums.LeadSource;
+                notes: string | null;
+                brokerId: string | null;
+                convertedToCustomerId: string | null;
+                lostReason: string | null;
+            } | null;
+            createdBy: {
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                deletedAt: Date | null;
+                userId: string | null;
+                teamId: string | null;
+                departmentId: string;
+                status: import(".prisma/client").$Enums.EmployeeStatus;
+                employeeCode: string;
+                designationId: string;
+                phone: string | null;
+                dateOfJoining: Date | null;
+                salary: import("@prisma/client-runtime-utils").Decimal | null;
+                address: string | null;
+                managerId: string | null;
+                staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            createdById: string;
+            status: import(".prisma/client").$Enums.QuotationStatus;
+            propertyId: string | null;
+            notes: string | null;
+            customerId: string | null;
+            leadId: string | null;
+            referenceNumber: string;
+            totalAmount: import("@prisma/client-runtime-utils").Decimal;
+            breakdown: import("@prisma/client/runtime/client").JsonValue;
+            validUntil: Date;
+        })[];
+        meta: {
+            total: number;
+            page: number;
+            limit: number;
+            totalPages: number;
+        };
+    }>;
+    findOne(companyId: string, id: string, userId: string, ipAddress?: string, userAgent?: string): Promise<{
+        companies: {
+            name: string;
+            id: string;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
+            slug: string;
+            settings: import("@prisma/client/runtime/client").JsonValue | null;
+            gstin: string | null;
+            pan: string | null;
+        };
+        createdBy: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            companyId: string;
+            deletedAt: Date | null;
+            userId: string | null;
+            teamId: string | null;
+            departmentId: string;
+            status: import(".prisma/client").$Enums.EmployeeStatus;
+            employeeCode: string;
+            designationId: string;
+            phone: string | null;
+            dateOfJoining: Date | null;
+            salary: import("@prisma/client-runtime-utils").Decimal | null;
+            address: string | null;
+            managerId: string | null;
+            staffType: import(".prisma/client").$Enums.EmployeeStaffType | null;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        createdById: string;
+        status: import(".prisma/client").$Enums.QuotationStatus;
+        propertyId: string | null;
+        notes: string | null;
+        customerId: string | null;
+        leadId: string | null;
+        referenceNumber: string;
+        totalAmount: import("@prisma/client-runtime-utils").Decimal;
+        breakdown: import("@prisma/client/runtime/client").JsonValue;
+        validUntil: Date;
+    }>;
+    updateStatus(companyId: string, id: string, dto: UpdateQuotationStatusDto): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        createdById: string;
+        status: import(".prisma/client").$Enums.QuotationStatus;
+        propertyId: string | null;
+        notes: string | null;
+        customerId: string | null;
+        leadId: string | null;
+        referenceNumber: string;
+        totalAmount: import("@prisma/client-runtime-utils").Decimal;
+        breakdown: import("@prisma/client/runtime/client").JsonValue;
+        validUntil: Date;
+    }>;
+    downloadPdf(companyId: string, id: string, userId: string, email: string, ipAddress?: string, userAgent?: string): Promise<Buffer<ArrayBufferLike>>;
+    getAccessLogs(companyId: string, quotationId: string): Promise<({
+        user: {
+            id: string;
+            email: string;
+            firstName: string;
+            lastName: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        companyId: string;
+        deletedAt: Date | null;
+        action: import(".prisma/client").$Enums.QuotationAction;
+        userId: string;
+        ipAddress: string | null;
+        quotationId: string;
+        userAgent: string | null;
+    })[]>;
+    private logAccess;
+}
